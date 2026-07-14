@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { convertGridSheet, summarizeReports, type GoogleGridSheet } from '@/lib/google/convert'
 import { buildDataset } from '@/lib/dataset/build'
 import { fetchSpreadsheetGrid, listFolderSpreadsheets } from '@/lib/google/client'
-import type { DatasetBuild, SheetImportReport } from '@/lib/types'
+import type { CellScalar, DatasetBuild, DatasetColumn, SheetImportReport } from '@/lib/types'
 
 export function needsImport(t: { google_modified_at: string | null; last_imported_at: string | null }): boolean {
   if (!t.last_imported_at) return true
@@ -28,7 +28,19 @@ export async function syncCatalog(admin: SupabaseClient): Promise<{ total: numbe
   return { total: files.length }
 }
 
-function datasetToRow(sheetId: string, d: DatasetBuild) {
+interface DatasetRow {
+  sheet_id: string
+  status: 'ok' | 'needs_mapping' | 'empty'
+  header_row: number | null
+  start_col: number | null
+  end_col: number | null
+  end_row: number | null
+  confidence: number | null
+  columns: DatasetColumn[] | null
+  rows: CellScalar[][] | null
+}
+
+function datasetToRow(sheetId: string, d: DatasetBuild): DatasetRow {
   if (d.status === 'ok') {
     return {
       sheet_id: sheetId, status: 'ok', header_row: d.headerRow,
