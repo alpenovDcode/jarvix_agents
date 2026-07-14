@@ -14,38 +14,7 @@ import { readFile } from 'node:fs/promises'
 import { buildDataset } from '@/lib/dataset/build'
 import { buildWidgets, type OkDataset } from '@/lib/analytics/widgets'
 import { fmtValue } from '@/lib/viz'
-import type { SheetSnapshot } from '@/lib/types'
-
-function parseCSV(text: string): string[][] {
-  const rows: string[][] = []
-  let row: string[] = []
-  let field = ''
-  let inQuotes = false
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i]
-    if (inQuotes) {
-      if (c === '"') {
-        if (text[i + 1] === '"') { field += '"'; i++ } else inQuotes = false
-      } else field += c
-    } else if (c === '"') inQuotes = true
-    else if (c === ',') { row.push(field); field = '' }
-    else if (c === '\n') { row.push(field); rows.push(row); row = []; field = '' }
-    else if (c !== '\r') field += c
-  }
-  if (field.length || row.length) { row.push(field); rows.push(row) }
-  return rows
-}
-
-function toSnapshot(matrix: string[][]): SheetSnapshot {
-  const cellData: SheetSnapshot['cellData'] = {}
-  matrix.forEach((r, ri) => {
-    r.forEach((v, ci) => {
-      if (v !== '') (cellData[ri] ??= {})[ci] = { v }
-    })
-  })
-  const cols = Math.max(1, ...matrix.map((r) => r.length))
-  return { name: 'CSV', rowCount: matrix.length + 10, columnCount: cols + 2, cellData, mergeData: [], styles: {} }
-}
+import { matrixToSnapshot, parseCsv } from '@/lib/csv'
 
 /** Полный URL Google-таблицы → ссылка CSV-экспорта первого листа. */
 function toCsvUrl(url: string): string {
@@ -109,10 +78,10 @@ async function main() {
     console.error('Укажи CSV-файл или ссылку на Google-таблицу:\n  npm run try -- ./table.csv\n  npm run try -- "https://docs.google.com/spreadsheets/d/.../edit"')
     process.exit(1)
   }
-  const matrix = parseCSV(await loadText(source))
+  const matrix = parseCsv(await loadText(source))
   console.log(`\n📄 Загружено: ${matrix.length} строк, ${Math.max(0, ...matrix.map((r) => r.length))} колонок`)
 
-  const snapshot = toSnapshot(matrix)
+  const snapshot = matrixToSnapshot(matrix)
   const d = buildDataset(snapshot)
   if (d.status === 'empty') { console.log('\n⚠️  Таблица пустая.'); return }
   if (d.status === 'needs_mapping') {
