@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import dynamic from 'next/dynamic'
 import { ReportTab } from './ReportTab'
+import { AnalyticsTab } from './AnalyticsTab'
 import { assembleWorkbookData, type SheetRowInput } from '@/lib/workbook'
 import type { TableImportReport } from '@/lib/types'
 
@@ -32,7 +33,7 @@ export function TableTabs({ table, sheets }: {
         ))}
       </div>
       {tab === 'Таблица' && <UniverViewer data={assembleWorkbookData(table.id, table.title, sheets)} />}
-      {tab === 'Аналитика' && <p className="mt-6 text-sm text-[var(--ink-muted)]">Скоро</p>}
+      {tab === 'Аналитика' && <AnalyticsTab tableId={table.id} sheetIds={sheets.map((s) => s.id)} />}
       {tab === 'Отчёт импорта' && <ReportTab report={table.import_report} />}
     </div>
   )
