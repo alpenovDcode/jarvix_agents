@@ -1,4 +1,6 @@
 -- TableHub фаза 1: схема, RLS, сиды
+-- Вход: email + пароль. Аккаунты создаёт только админ (публичная регистрация отключена
+-- в настройках Supabase). Наличие аккаунта в auth.users = доступ; роль хранится в user_roles.
 create extension if not exists pgcrypto;
 
 create table public.profiles (
@@ -6,11 +8,6 @@ create table public.profiles (
   email text not null,
   full_name text,
   avatar_url text,
-  created_at timestamptz not null default now()
-);
-
-create table public.allowlist (
-  email text primary key,
   created_at timestamptz not null default now()
 );
 
@@ -83,44 +80,36 @@ create or replace function public.jwt_email() returns text language sql stable a
   select lower(coalesce(auth.jwt() ->> 'email', ''))
 $$;
 
-create or replace function public.is_allowlisted() returns boolean
-language sql stable security definer set search_path = public as $$
-  select exists (select 1 from public.allowlist a where lower(a.email) = public.jwt_email())
-$$;
-
 create or replace function public.is_admin() returns boolean
 language sql stable security definer set search_path = public as $$
-  select public.is_allowlisted() and exists (
+  select exists (
     select 1 from public.user_roles r
     where lower(r.email) = public.jwt_email() and r.role = 'admin')
 $$;
 
 alter table public.profiles enable row level security;
-alter table public.allowlist enable row level security;
 alter table public.user_roles enable row level security;
 alter table public.tables enable row level security;
 alter table public.table_sheets enable row level security;
 alter table public.datasets enable row level security;
 
-create policy "profiles select allowlisted" on public.profiles
-  for select to authenticated using (public.is_allowlisted());
-create policy "allowlist select own or admin" on public.allowlist
-  for select to authenticated using (lower(email) = public.jwt_email() or public.is_admin());
-create policy "allowlist write admin" on public.allowlist
-  for all to authenticated using (public.is_admin()) with check (public.is_admin());
+-- Любой аутентифицированный пользователь допущен (аккаунты создаёт только админ).
+create policy "profiles select authenticated" on public.profiles
+  for select to authenticated using (true);
 create policy "roles select own or admin" on public.user_roles
   for select to authenticated using (lower(email) = public.jwt_email() or public.is_admin());
 create policy "roles write admin" on public.user_roles
   for all to authenticated using (public.is_admin()) with check (public.is_admin());
-create policy "tables select allowlisted" on public.tables
-  for select to authenticated using (public.is_allowlisted());
-create policy "sheets select allowlisted" on public.table_sheets
-  for select to authenticated using (public.is_allowlisted());
-create policy "datasets select allowlisted" on public.datasets
-  for select to authenticated using (public.is_allowlisted());
--- Запись в tables/table_sheets/datasets — только service role (обходит RLS).
+create policy "tables select authenticated" on public.tables
+  for select to authenticated using (true);
+create policy "sheets select authenticated" on public.table_sheets
+  for select to authenticated using (true);
+create policy "datasets select authenticated" on public.datasets
+  for select to authenticated using (true);
+-- Запись в tables/table_sheets/datasets и создание пользователей — только service role (обходит RLS).
 
-insert into public.allowlist (email) values ('assistmv5@gmail.com') on conflict do nothing;
+-- Роль первого админа. Сам auth-аккаунт с этим email создаётся вручную один раз
+-- (Supabase → Authentication → Add user) — см. README.
 insert into public.user_roles (email, role) values ('assistmv5@gmail.com', 'admin') on conflict do nothing;
 
 alter publication supabase_realtime add table public.datasets;
