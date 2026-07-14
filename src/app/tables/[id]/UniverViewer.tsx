@@ -24,7 +24,14 @@ export default function UniverViewer({ data }: { data: Record<string, unknown> }
       workbook.setEditable(false) // фаза 1 — только просмотр
       dispose = () => univer.dispose()
     })()
-    return () => { disposed = true; dispose?.() }
+    // dispose откладываем: синхронный univer.dispose() во время рендер-фазы React
+    // (при переключении вкладок) роняет рендерер в race condition
+    return () => {
+      disposed = true
+      const d = dispose
+      dispose = undefined
+      if (d) setTimeout(d, 0)
+    }
   }, [data])
 
   return <div ref={containerRef} className="mt-3 h-[70vh] w-full overflow-hidden rounded-xl border border-[var(--hairline)]" />

@@ -10,7 +10,8 @@
     "check:db": "tsx scripts/check-db.ts",
     "check:google": "tsx scripts/check-google.ts",
     "try": "tsx scripts/try-table.ts",
-    "seed:demo": "tsx scripts/seed-demo.ts"
+    "seed:demo": "tsx scripts/seed-demo.ts",
+    "create:admin": "tsx scripts/create-admin.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.3",

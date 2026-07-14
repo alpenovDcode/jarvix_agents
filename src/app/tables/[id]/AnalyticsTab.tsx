@@ -143,9 +143,9 @@ function ChartCard({ w }: { w: Widget }) {
             <LineChart data={w.points} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
               <CartesianGrid stroke={VIZ.grid} vertical={false} />
               <XAxis dataKey="t" tick={{ fill: VIZ.muted, fontSize: 11 }} tickLine={false} axisLine={{ stroke: VIZ.axis }} minTickGap={24} />
-              <YAxis tick={{ fill: VIZ.muted, fontSize: 11 }} tickLine={false} axisLine={false} width={48} tickFormatter={fmtCompact} />
+              <YAxis tick={{ fill: VIZ.muted, fontSize: 11 }} tickLine={false} axisLine={false} width={64} tickFormatter={fmtCompact} />
               <Tooltip content={<ChartTooltip format={w.format} />} />
-              <Line type="monotone" dataKey="v" stroke={VIZ.series1} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+              <Line type="monotone" dataKey="v" stroke={VIZ.series1} strokeWidth={2} dot={{ r: 2.5, fill: VIZ.series1 }} activeDot={{ r: 4 }} isAnimationActive={false} />
             </LineChart>
           </ResponsiveContainer>
         </div>
