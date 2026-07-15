@@ -185,7 +185,7 @@ function ChartCard({ w }: { w: Widget }) {
   const data = isBreakdown
     ? w.items.map((i) => ({ name: i.name, value: i.count }))
     : w.items.map((i) => ({ name: i.name, value: i.value }))
-  const format: 'number' | 'money' | 'percent' = isBreakdown ? 'number' : w.format
+  const format: ValueFormat = isBreakdown ? 'number' : w.format
   return (
     <figure className="rounded-xl border border-[var(--hairline)] bg-[var(--surface)] p-4">
       <figcaption className="text-sm font-medium">{w.title}</figcaption>
