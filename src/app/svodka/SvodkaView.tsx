@@ -53,19 +53,27 @@ export function SvodkaView({ data, tabs, backHref = '/', backLabel = 'Катал
         <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
           {data.kpis.map((k) => <KpiCard key={k.id} k={k} />)}
         </div>
-        <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <Panel title="Прогресс к целям (план / факт)" note="Факт против плана за период. Цвет — статус достижения.">
-            <div className="mt-4 space-y-4">{data.goals.map((g) => <GoalBar key={g.id} g={g} />)}</div>
-          </Panel>
-          <Panel title="Было → Стало" note="Начало периода против конца.">
-            <div className="mt-4 divide-y" style={{ borderColor: V.hairline }}>
-              {data.wasNow.map((r) => <WasNowRowView key={r.id} r={r} />)}
-            </div>
-          </Panel>
-        </div>
-        <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-          {data.areas.map((a) => <AreaCard key={a.id} a={a} />)}
-        </div>
+        {(data.goals.length > 0 || data.wasNow.length > 0) && (
+          <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+            {data.goals.length > 0 && (
+              <Panel title="Прогресс к целям (план / факт)" note="Факт против плана за период. Цвет — статус достижения.">
+                <div className="mt-4 space-y-4">{data.goals.map((g) => <GoalBar key={g.id} g={g} />)}</div>
+              </Panel>
+            )}
+            {data.wasNow.length > 0 && (
+              <Panel title="Было → Стало" note="Начало периода против конца.">
+                <div className="mt-4 divide-y" style={{ borderColor: V.hairline }}>
+                  {data.wasNow.map((r) => <WasNowRowView key={r.id} r={r} />)}
+                </div>
+              </Panel>
+            )}
+          </div>
+        )}
+        {data.areas.length > 0 && (
+          <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+            {data.areas.map((a) => <AreaCard key={a.id} a={a} />)}
+          </div>
+        )}
         <div className="mt-4">
           <ComboCard combo={data.combo} />
         </div>
