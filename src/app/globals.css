@@ -18,6 +18,12 @@
   --surface-hover: #f0efec;
 }
 
+/* Отключаем жест «назад/вперёд» браузера при горизонтальном скролле (трекпад macOS):
+   иначе прокрутка таблицы вправо срабатывает как навигация назад. */
+html, body {
+  overscroll-behavior-x: none;
+}
+
 body {
   background: var(--page);
   color: var(--ink);

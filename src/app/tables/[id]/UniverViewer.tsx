@@ -34,5 +34,5 @@ export default function UniverViewer({ data }: { data: Record<string, unknown> }
     }
   }, [data])
 
-  return <div ref={containerRef} className="mt-3 h-[70vh] w-full overflow-hidden rounded-xl border border-[var(--hairline)]" />
+  return <div ref={containerRef} style={{ overscrollBehavior: 'none' }} className="mt-3 h-[70vh] w-full overflow-hidden rounded-xl border border-[var(--hairline)]" />
 }
