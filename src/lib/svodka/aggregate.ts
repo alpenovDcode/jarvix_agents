@@ -9,16 +9,19 @@ import { fmtInt } from '@/lib/viz'
 
 export type { ValueFormat }
 
-export interface Kpi { id: string; label: string; value: number; format: ValueFormat; deltaPct: number | null; note: string }
+export interface Kpi { id: string; label: string; value: number; format: ValueFormat; deltaPct: number | null; note: string; higherBetter?: boolean }
 export interface Goal { id: string; label: string; value: number; target: number; format: ValueFormat }
 export interface WasNowRow { id: string; label: string; from: number; to: number; deltaPct: number; format: ValueFormat }
 export interface Point { t: string; v: number }
 export interface AreaSeries { id: string; title: string; note: string; format: ValueFormat; color: 'series1' | 'series2' | 'series3'; points: Point[] }
 export interface ComboData { title: string; note: string; barLabel: string; lineLabel: string; barFormat: ValueFormat; lineFormat: ValueFormat; rows: { t: string; bar: number; line: number }[] }
 export interface Insight { id: string; emoji: string; label: string; text: string }
+export interface HeadlineStat { label: string; value: number; format: ValueFormat }
 export interface Svodka {
   period: string
-  headline: { spend: number; sales: number; leads: number; reach: number }
+  title: string
+  subtitle: string
+  headline: HeadlineStat[]
   kpis: Kpi[]
   goals: Goal[]
   wasNow: WasNowRow[]
@@ -173,7 +176,14 @@ export function buildSvodka(inputs: SvodkaInputs): Svodka {
 
   return {
     period: 'Демо-период',
-    headline: { spend, sales, leads, reach },
+    title: 'Сводка отдела маркетинга',
+    subtitle: 'Демо-данные · собрано из таблиц «Рекламные каналы», «Воронка», «Контент-план»',
+    headline: [
+      { label: 'Расход', value: spend, format: 'money' },
+      { label: 'Продажи', value: sales, format: 'number' },
+      { label: 'Лиды', value: leads, format: 'number' },
+      { label: 'Охват', value: reach, format: 'number' },
+    ],
     kpis, goals, wasNow, areas, combo, insights, missing,
   }
 }

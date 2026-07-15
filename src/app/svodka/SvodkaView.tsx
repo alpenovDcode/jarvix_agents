@@ -12,13 +12,13 @@ const STATUS: Record<'good' | 'warning' | 'critical', string> = { good: V.good, 
 
 // Разделы будущего дашборда отдела. Активна только «Сводка»; остальные — заглушки
 // (наполняются по мере автоматизации: Контент, Продажи, Воронка… — каждый свой набор метрик).
-const TABS = ['Сводка', 'Контент', 'Платформы', 'Рассылки', 'Воронка', 'База', 'Продажи', 'Клиенты', 'Связи', 'Смыслы', 'Итоги']
+export const DEPT_TABS = ['Сводка', 'Контент', 'Платформы', 'Рассылки', 'Воронка', 'База', 'Продажи', 'Клиенты', 'Связи', 'Смыслы', 'Итоги']
 
-function Nav() {
+function Nav({ tabs, backHref, backLabel }: { tabs?: string[]; backHref: string; backLabel: string }) {
   return (
     <div className="mb-6 flex items-center justify-between border-b pb-4" style={{ borderColor: V.hairline }}>
       <div className="flex flex-wrap items-center gap-1.5">
-        {TABS.map((t, i) => (
+        {(tabs ?? []).map((t, i) => (
           <span
             key={t}
             className="rounded-lg px-3 py-1.5 text-sm"
@@ -30,17 +30,19 @@ function Nav() {
           </span>
         ))}
       </div>
-      <Link href="/" className="shrink-0 text-sm underline" style={{ color: V.series1 }}>← Каталог</Link>
+      <Link href={backHref} className="shrink-0 text-sm underline" style={{ color: V.series1 }}>← {backLabel}</Link>
     </div>
   )
 }
 
-export function SvodkaView({ data }: { data: Svodka }) {
+export function SvodkaView({ data, tabs, backHref = '/', backLabel = 'Каталог' }: {
+  data: Svodka; tabs?: string[]; backHref?: string; backLabel?: string
+}) {
   return (
     // data-page-theme: body красится через CSS :has в globals.css (без JS и flash)
     <div data-page-theme="dark" style={{ background: V.page, color: V.inkPrimary, fontFamily: 'system-ui, -apple-system, "Segoe UI", sans-serif' }} className="min-h-screen">
       <div className="mx-auto max-w-6xl px-6 py-8">
-        <Nav />
+        <Nav tabs={tabs} backHref={backHref} backLabel={backLabel} />
         {data.missing.length > 0 && (
           <div className="mb-4 rounded-lg border p-3 text-sm" style={{ borderColor: V.warning, background: V.warningSoft, color: V.inkPrimary }}>
             ⚠ В источниках не найдены колонки: {data.missing.join(', ')} — связанные метрики показывают нули.
@@ -52,10 +54,10 @@ export function SvodkaView({ data }: { data: Svodka }) {
           {data.kpis.map((k) => <KpiCard key={k.id} k={k} />)}
         </div>
         <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <Panel title="Прогресс к целям месяца" note="Факт month-to-date против цели. Цвет — статус достижения.">
+          <Panel title="Прогресс к целям (план / факт)" note="Факт против плана за период. Цвет — статус достижения.">
             <div className="mt-4 space-y-4">{data.goals.map((g) => <GoalBar key={g.id} g={g} />)}</div>
           </Panel>
-          <Panel title="Было → Стало" note="Первая неделя периода против последней.">
+          <Panel title="Было → Стало" note="Начало периода против конца.">
             <div className="mt-4 divide-y" style={{ borderColor: V.hairline }}>
               {data.wasNow.map((r) => <WasNowRowView key={r.id} r={r} />)}
             </div>
@@ -75,16 +77,12 @@ export function SvodkaView({ data }: { data: Svodka }) {
 }
 
 function Hero({ data }: { data: Svodka }) {
-  const h = data.headline
   return (
     <div className="rounded-2xl border p-6" style={{ borderColor: V.hairline, background: `linear-gradient(135deg, ${V.surfaceRaised}, ${V.surface})` }}>
-      <h1 className="text-2xl font-bold">Сводка отдела маркетинга</h1>
-      <p className="mt-1 text-sm" style={{ color: V.inkSecondary }}>Демо-данные · собрано из таблиц «Рекламные каналы», «Воронка», «Контент-план»</p>
+      <h1 className="text-2xl font-bold">{data.title}</h1>
+      <p className="mt-1 text-sm" style={{ color: V.inkSecondary }}>{data.subtitle}</p>
       <div className="mt-5 flex flex-wrap gap-x-8 gap-y-3 text-sm">
-        <HeroStat label="Расход" value={fmtRub(h.spend)} />
-        <HeroStat label="Продажи" value={fmtInt(h.sales)} />
-        <HeroStat label="Лиды" value={fmtInt(h.leads)} />
-        <HeroStat label="Охват" value={fmtInt(h.reach)} />
+        {data.headline.map((s, i) => <HeroStat key={i} label={s.label} value={fmt(s.value, s.format)} />)}
       </div>
     </div>
   )
@@ -113,7 +111,7 @@ function Panel({ title, note, children }: { title: string; note?: string; childr
 }
 
 function KpiCard({ k }: { k: Kpi }) {
-  const st = deltaStatus(k.deltaPct)
+  const st = deltaStatus(k.deltaPct, k.higherBetter ?? true)
   const topColor = k.deltaPct === null ? V.hairline : STATUS[st]
   return (
     <div className="rounded-xl border p-4" style={{ borderColor: V.hairline, background: V.surface, borderTop: `3px solid ${topColor}` }}>

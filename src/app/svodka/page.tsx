@@ -6,7 +6,7 @@ import { okDatasetFromRow, type DatasetDbRow } from '@/lib/dataset/fromRow'
 import { DEMO_ADS, DEMO_CONTENT, DEMO_FUNNEL } from '@/lib/demo'
 import { VIZ_DARK } from '@/lib/viz'
 import type { OkDataset } from '@/lib/analytics/widgets'
-import { SvodkaView } from './SvodkaView'
+import { SvodkaView, DEPT_TABS } from './SvodkaView'
 
 export const dynamic = 'force-dynamic'
 
@@ -59,5 +59,5 @@ export default async function SvodkaPage() {
   ])
   if (!ads || !funnel || !content) return <Missing />
   const data = buildSvodka({ ads, funnel, content })
-  return <SvodkaView data={data} />
+  return <SvodkaView data={data} tabs={DEPT_TABS} />
 }

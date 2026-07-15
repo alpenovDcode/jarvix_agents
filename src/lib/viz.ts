@@ -59,8 +59,11 @@ export function goalStatus(pct: number): 'good' | 'warning' | 'critical' {
   return 'critical'
 }
 
-/** Цвет дельты: рост — хорошо (зелёный), падение — плохо (красный), около нуля — нейтрально. */
-export function deltaStatus(pct: number | null): 'good' | 'warning' | 'critical' {
+/** Цвет дельты: рост — хорошо (зелёный), падение — плохо (красный), около нуля — нейтрально.
+ * Для метрик «меньше — лучше» (цена лида, стоимость) передать higherBetter=false — цвет инвертируется. */
+export function deltaStatus(pct: number | null, higherBetter = true): 'good' | 'warning' | 'critical' {
   if (pct === null || Math.abs(pct) < 3) return 'warning'
-  return pct > 0 ? 'good' : 'critical'
+  const rising = pct > 0
+  const good = higherBetter ? rising : !rising
+  return good ? 'good' : 'critical'
 }
