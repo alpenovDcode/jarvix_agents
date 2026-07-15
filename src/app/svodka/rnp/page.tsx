@@ -5,6 +5,7 @@ import { buildRnpSvodka, type RnpMonth } from '@/lib/svodka/rnp'
 import { VIZ_DARK } from '@/lib/viz'
 import type { SheetSnapshot } from '@/lib/types'
 import { SvodkaView } from '../SvodkaView'
+import { SvodkaLive } from '../SvodkaLive'
 
 export const dynamic = 'force-dynamic'
 
@@ -50,5 +51,10 @@ export default async function RnpSvodkaPage() {
 
   if (monthsInput.length < 2) return <Missing />
   const svodka = buildRnpSvodka(monthsInput)
-  return <SvodkaView data={svodka} backHref="/" backLabel="Каталог" />
+  return (
+    <>
+      <SvodkaView data={svodka} backHref="/" backLabel="Каталог" />
+      <SvodkaLive />
+    </>
+  )
 }

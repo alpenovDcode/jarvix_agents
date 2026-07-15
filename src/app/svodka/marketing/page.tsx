@@ -5,6 +5,7 @@ import { buildMarketingSvodka, type MarketingInput } from '@/lib/svodka/marketin
 import { VIZ_DARK } from '@/lib/viz'
 import type { SheetSnapshot } from '@/lib/types'
 import { SvodkaView } from '../SvodkaView'
+import { SvodkaLive } from '../SvodkaLive'
 
 export const dynamic = 'force-dynamic'
 
@@ -55,5 +56,10 @@ export default async function MarketingSvodkaPage() {
 
   if (input.channels.length === 0 && !input.trafficAll) return <Missing />
   const svodka = buildMarketingSvodka(input)
-  return <SvodkaView data={svodka} backHref="/" backLabel="Каталог" />
+  return (
+    <>
+      <SvodkaView data={svodka} backHref="/" backLabel="Каталог" />
+      <SvodkaLive />
+    </>
+  )
 }
