@@ -4,19 +4,21 @@ const DAY_MS = 86_400_000
 const SERIAL_EPOCH_UTC = Date.UTC(1899, 11, 30) // эпоха серийных дат Google/Excel
 
 export function serialToISO(serial: number): string {
-  return new Date(SERIAL_EPOCH_UTC + Math.round(serial) * DAY_MS).toISOString().slice(0, 10)
+  // floor, не round: дробная часть — время суток; DATE_TIME ≥ 12:00 не должен уезжать на завтра
+  return new Date(SERIAL_EPOCH_UTC + Math.floor(serial) * DAY_MS).toISOString().slice(0, 10)
 }
 
 export function parseRuDate(s: string): string | null {
   const t = s.trim()
   const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(t)
-  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`
-  const m = /^(\d{1,2})[./](\d{1,2})[./](\d{2}|\d{4})$/.exec(t)
+  const m = iso ?? /^(\d{1,2})[./](\d{1,2})[./](\d{2}|\d{4})$/.exec(t)
   if (!m) return null
-  const dd = Number(m[1])
+  const dd = Number(iso ? m[3] : m[1])
   const mm = Number(m[2])
-  let yy = Number(m[3])
+  let yy = Number(iso ? m[1] : m[3])
   if (yy < 100) yy += 2000
+  // валидируем и ISO-ветку тоже: «2026-99-99» не должен пройти как дата
+  // (дальше bucketKey сделал бы new Date(...).toISOString() на Invalid Date → RangeError)
   if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return null
   return `${yy}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`
 }
@@ -32,8 +34,13 @@ export function parseNumberLike(v: CellScalar): number | null {
     t = t.slice(0, -1)
   }
   t = t.replace(/[₸₽$€]/g, '')
-  if (t.includes('.') && t.includes(',')) t = t.replace(/,/g, '')
-  else t = t.replace(',', '.')
+  if (t.includes('.') && t.includes(',')) {
+    // разделитель, стоящий ПОЗЖЕ, — десятичный: «1,234.56» → точка, «1.234,56» → запятая
+    if (t.lastIndexOf(',') > t.lastIndexOf('.')) t = t.replace(/\./g, '').replace(',', '.')
+    else t = t.replace(/,/g, '')
+  } else {
+    t = t.replace(',', '.')
+  }
   if (!/^-?\d+(\.\d+)?$/.test(t)) return null
   const n = Number(t)
   return percent ? n / 100 : n

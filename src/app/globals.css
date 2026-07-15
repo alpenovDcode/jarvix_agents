@@ -7,10 +7,25 @@
   --ink-secondary: #52514e;
   --ink-muted: #898781;
   --hairline: #e1e0d9;
+  /* акценты — синхронизированы с палитрой src/lib/viz.ts (менять только вместе) */
+  --brand: #2a78d6;
+  --brand-hover: #2361ae;
+  --brand-soft: #eef5fd;
+  --negative: #e34948;
+  --negative-soft: #fdeaea;
+  --good-text: #006300;
+  --good-soft: #eaf3ea;
+  --surface-hover: #f0efec;
 }
 
 body {
   background: var(--page);
   color: var(--ink);
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+/* Тёмные страницы (например, /svodka) красят фон под собой без JS-хака —
+   иначе при overscroll из-под тёмного контента виден светлый body. */
+body:has([data-page-theme='dark']) {
+  background: #0b0b0c;
 }

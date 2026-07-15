@@ -11,17 +11,20 @@ export default async function TablePage({ params }: { params: Promise<{ id: stri
   const session = await requireUser()
   const { id } = await params
   const supabase = await createServerSupabase()
-  const { data: table } = await supabase
-    .from('tables')
-    .select('id, title, folder, import_status, import_report, last_imported_at')
-    .eq('id', id)
-    .maybeSingle()
+  // оба запроса зависят только от id — параллелим, это самый горячий роут
+  const [{ data: table }, { data: sheets }] = await Promise.all([
+    supabase
+      .from('tables')
+      .select('id, title, folder, import_status, import_report, last_imported_at')
+      .eq('id', id)
+      .maybeSingle(),
+    supabase
+      .from('table_sheets')
+      .select('id, google_sheet_id, title, sheet_index, snapshot')
+      .eq('table_id', id)
+      .order('sheet_index'),
+  ])
   if (!table) notFound()
-  const { data: sheets } = await supabase
-    .from('table_sheets')
-    .select('id, google_sheet_id, title, sheet_index, snapshot')
-    .eq('table_id', id)
-    .order('sheet_index')
 
   return (
     <>

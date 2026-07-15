@@ -56,45 +56,55 @@ function datasetToRow(sheetId: string, d: DatasetBuild): DatasetRow {
 }
 
 export async function importTable(admin: SupabaseClient, table: { id: string; google_spreadsheet_id: string }): Promise<void> {
+  // метку берём ДО чтения грида: правка, сделанная во время импорта, получит
+  // modifiedTime > last_imported_at и попадёт в следующий цикл (иначе терялась бы)
+  const startedAt = new Date().toISOString()
   const gridSheets = await fetchSpreadsheetGrid(table.google_spreadsheet_id)
-  const reports: SheetImportReport[] = []
-  const keptSheetIds: number[] = []
 
-  for (let i = 0; i < gridSheets.length; i++) {
-    const gs = gridSheets[i] as GoogleGridSheet
+  // сначала конвертируем всё (CPU), потом пишем двумя батчами —
+  // меньше round-trip'ов и уже окно частично-обновлённого состояния
+  const converted = gridSheets.map((raw, i) => {
+    const gs = raw as GoogleGridSheet
     const googleSheetId = gs.properties?.sheetId ?? i
     const { snapshot, report } = convertGridSheet(gs, i)
-    reports.push(report)
-    keptSheetIds.push(googleSheetId)
+    return { googleSheetId, sheetIndex: gs.properties?.index ?? i, snapshot, report }
+  })
 
-    const { data: sheetRow, error } = await admin
+  if (converted.length) {
+    const { data: sheetRows, error } = await admin
       .from('table_sheets')
       .upsert(
-        { table_id: table.id, google_sheet_id: googleSheetId, title: snapshot.name, sheet_index: gs.properties?.index ?? i, snapshot },
+        converted.map((c) => ({
+          table_id: table.id, google_sheet_id: c.googleSheetId, title: c.snapshot.name,
+          sheet_index: c.sheetIndex, snapshot: c.snapshot,
+        })),
         { onConflict: 'table_id,google_sheet_id' },
       )
-      .select('id')
-      .single()
+      .select('id, google_sheet_id')
     if (error) throw new Error(`table_sheets: ${error.message}`)
 
-    const { error: dsError } = await admin
-      .from('datasets')
-      .upsert(datasetToRow(sheetRow.id, buildDataset(snapshot)), { onConflict: 'sheet_id' })
+    const idByGoogleId = new Map((sheetRows ?? []).map((r) => [r.google_sheet_id as number, r.id as string]))
+    const datasetRows = converted.map((c) => {
+      const sheetId = idByGoogleId.get(c.googleSheetId)
+      if (!sheetId) throw new Error(`table_sheets: upsert не вернул id для листа ${c.googleSheetId}`)
+      return datasetToRow(sheetId, buildDataset(c.snapshot))
+    })
+    const { error: dsError } = await admin.from('datasets').upsert(datasetRows, { onConflict: 'sheet_id' })
     if (dsError) throw new Error(`datasets: ${dsError.message}`)
-  }
 
-  if (keptSheetIds.length) {
-    await admin.from('table_sheets').delete()
+    const { error: delError } = await admin.from('table_sheets').delete()
       .eq('table_id', table.id)
-      .not('google_sheet_id', 'in', `(${keptSheetIds.join(',')})`)
+      .not('google_sheet_id', 'in', `(${converted.map((c) => c.googleSheetId).join(',')})`)
+    if (delError) throw new Error(`table_sheets delete: ${delError.message}`) // иначе удалённые в Google листы молча живут дальше
   }
 
-  await admin.from('tables').update({
+  const { error: updError } = await admin.from('tables').update({
     import_status: 'ok',
     import_error: null,
-    import_report: summarizeReports(reports),
-    last_imported_at: new Date().toISOString(),
+    import_report: summarizeReports(converted.map((c) => c.report)),
+    last_imported_at: startedAt,
   }).eq('id', table.id)
+  if (updError) throw new Error(`tables: ${updError.message}`)
 }
 
 export interface BatchResult { imported: number; remaining: number; errors: { table: string; message: string }[] }

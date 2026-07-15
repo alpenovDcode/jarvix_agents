@@ -2,36 +2,48 @@ import Link from 'next/link'
 import { requireUser } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { buildSvodka } from '@/lib/svodka/aggregate'
+import { okDatasetFromRow, type DatasetDbRow } from '@/lib/dataset/fromRow'
+import { DEMO_ADS, DEMO_CONTENT, DEMO_FUNNEL } from '@/lib/demo'
+import { VIZ_DARK } from '@/lib/viz'
 import type { OkDataset } from '@/lib/analytics/widgets'
 import { SvodkaView } from './SvodkaView'
 
 export const dynamic = 'force-dynamic'
 
+interface TableWithDatasets {
+  table_sheets: { sheet_index: number | null; datasets: DatasetDbRow | DatasetDbRow[] | null }[]
+}
+
+/** Один вложенный запрос вместо трёх последовательных (tables → table_sheets → datasets). */
 async function loadDataset(
   supabase: Awaited<ReturnType<typeof createServerSupabase>>,
   gsid: string,
 ): Promise<OkDataset | null> {
-  const { data: table } = await supabase.from('tables').select('id').eq('google_spreadsheet_id', gsid).maybeSingle()
-  if (!table) return null
-  const { data: sheet } = await supabase
-    .from('table_sheets').select('id').eq('table_id', table.id).order('sheet_index').limit(1).maybeSingle()
-  if (!sheet) return null
-  const { data: d } = await supabase.from('datasets').select('*').eq('sheet_id', sheet.id).maybeSingle()
-  if (!d || d.status !== 'ok') return null
-  return {
-    status: 'ok', headerRow: d.header_row, confidence: d.confidence,
-    range: { startCol: d.start_col, endCol: d.end_col, endRow: d.end_row },
-    columns: d.columns, rows: d.rows,
-  }
+  const { data } = await supabase
+    .from('tables')
+    .select('table_sheets(sheet_index, datasets(status, header_row, start_col, end_col, end_row, confidence, columns, rows))')
+    .eq('google_spreadsheet_id', gsid)
+    .maybeSingle<TableWithDatasets>()
+  const sheet = (data?.table_sheets ?? [])
+    .slice()
+    .sort((a, b) => (a.sheet_index ?? 0) - (b.sheet_index ?? 0))[0]
+  const raw = Array.isArray(sheet?.datasets) ? sheet.datasets[0] : sheet?.datasets
+  return okDatasetFromRow(raw)
 }
 
 function Missing() {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#0b0b0c] text-center text-white">
+    <main
+      className="flex min-h-screen items-center justify-center text-center"
+      style={{ background: VIZ_DARK.page, color: VIZ_DARK.inkPrimary }}
+      data-page-theme="dark"
+    >
       <div>
         <h1 className="text-lg font-semibold">Нет демо-данных для сводки</h1>
-        <p className="mt-2 text-sm text-white/60">Запустите <code>npm run seed:demo</code> — нужны таблицы demo-ads, demo-funnel, demo-content.</p>
-        <Link href="/" className="mt-4 inline-block text-sm text-[#3987e5] underline">← В каталог</Link>
+        <p className="mt-2 text-sm" style={{ color: VIZ_DARK.inkSecondary }}>
+          Запустите <code>npm run seed:demo</code> — нужны таблицы {DEMO_ADS}, {DEMO_FUNNEL}, {DEMO_CONTENT}.
+        </p>
+        <Link href="/" className="mt-4 inline-block text-sm underline" style={{ color: VIZ_DARK.series1 }}>← В каталог</Link>
       </div>
     </main>
   )
@@ -41,9 +53,9 @@ export default async function SvodkaPage() {
   await requireUser()
   const supabase = await createServerSupabase()
   const [ads, funnel, content] = await Promise.all([
-    loadDataset(supabase, 'demo-ads'),
-    loadDataset(supabase, 'demo-funnel'),
-    loadDataset(supabase, 'demo-content'),
+    loadDataset(supabase, DEMO_ADS),
+    loadDataset(supabase, DEMO_FUNNEL),
+    loadDataset(supabase, DEMO_CONTENT),
   ])
   if (!ads || !funnel || !content) return <Missing />
   const data = buildSvodka({ ads, funnel, content })

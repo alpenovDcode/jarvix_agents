@@ -61,7 +61,55 @@ describe('buildSvodka', () => {
 
   it('цели содержат факт и таргет', () => {
     const g = s.goals.find((x) => x.id === 'g-sales')!
-    expect(g).toMatchObject({ value: 28, target: 60 })
+    expect(g).toMatchObject({ value: 28, target: 1000 })
+  })
+
+  it('halfDelta сравнивает средние половин: ровный ряд ≈ 0%', () => {
+    const flat = buildSvodka({
+      ...inputs,
+      funnel: ds(
+        [{ title: 'Неделя', type: 'date' }, { title: 'Показы', type: 'number' }, { title: 'Клики', type: 'number' }, { title: 'Заявки', type: 'number' }, { title: 'Продажи', type: 'number' }],
+        [
+          ['2026-05-04', 1000, 100, 20, 10],
+          ['2026-05-11', 1000, 100, 20, 10],
+          ['2026-05-18', 1000, 100, 20, 10], // нечётная длина — раньше суммы половин давали +100%
+        ],
+      ),
+    })
+    expect(flat.kpis.find((k) => k.id === 'sales')!.deltaPct).toBe(0)
+  })
+
+  it('combo джойнит по ключу недели: пропуск продаж не сдвигает бары', () => {
+    const gappy = buildSvodka({
+      ...inputs,
+      funnel: ds(
+        [{ title: 'Неделя', type: 'date' }, { title: 'Показы', type: 'number' }, { title: 'Клики', type: 'number' }, { title: 'Заявки', type: 'number' }, { title: 'Продажи', type: 'number' }],
+        [
+          ['2026-05-04', 1000, 100, 20, 4],
+          ['2026-05-11', 1200, 120, 24, null], // продажи не заполнены
+          ['2026-05-18', 1400, 140, 28, 8],
+        ],
+      ),
+    })
+    // все 3 недели на месте, заявки привязаны к своим неделям, кумулятив не падает
+    expect(gappy.combo.rows.map((r) => ({ t: r.t, bar: r.bar }))).toEqual([
+      { t: '04.05', bar: 20 },
+      { t: '11.05', bar: 24 },
+      { t: '18.05', bar: 28 },
+    ])
+    expect(gappy.combo.rows.map((r) => r.line)).toEqual([4, 4, 12])
+  })
+
+  it('missing: пусто при полных данных, называет отсутствующую колонку', () => {
+    expect(s.missing).toEqual([])
+    const broken = buildSvodka({
+      ...inputs,
+      ads: ds(
+        [{ title: 'Дата', type: 'date' }, { title: 'Канал', type: 'category' }, { title: 'Затраты', type: 'money' }, { title: 'Лиды', type: 'number' }],
+        [['2026-06-01', 'Instagram', 1000, 10]],
+      ),
+    })
+    expect(broken.missing).toEqual(['Рекламные каналы: «Расход»'])
   })
 
   it('combo: кумулятивная линия растёт до суммы продаж', () => {

@@ -1,6 +1,5 @@
 'use client'
 import Link from 'next/link'
-import { useEffect } from 'react'
 import {
   Area, AreaChart, Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
@@ -37,17 +36,16 @@ function Nav() {
 }
 
 export function SvodkaView({ data }: { data: Svodka }) {
-  // Тёмный фон под overscroll (страница тёмная, а глобальный body — светлый).
-  useEffect(() => {
-    const prev = document.body.style.backgroundColor
-    document.body.style.backgroundColor = V.page
-    return () => { document.body.style.backgroundColor = prev }
-  }, [])
-
   return (
-    <div style={{ background: V.page, color: V.inkPrimary, fontFamily: 'system-ui, -apple-system, "Segoe UI", sans-serif' }} className="min-h-screen">
+    // data-page-theme: body красится через CSS :has в globals.css (без JS и flash)
+    <div data-page-theme="dark" style={{ background: V.page, color: V.inkPrimary, fontFamily: 'system-ui, -apple-system, "Segoe UI", sans-serif' }} className="min-h-screen">
       <div className="mx-auto max-w-6xl px-6 py-8">
         <Nav />
+        {data.missing.length > 0 && (
+          <div className="mb-4 rounded-lg border p-3 text-sm" style={{ borderColor: V.warning, background: V.warningSoft, color: V.inkPrimary }}>
+            ⚠ В источниках не найдены колонки: {data.missing.join(', ')} — связанные метрики показывают нули.
+          </div>
+        )}
         <Hero data={data} />
         <SectionLabel>Ключевые метрики</SectionLabel>
         <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -83,7 +81,7 @@ function Hero({ data }: { data: Svodka }) {
       <h1 className="text-2xl font-bold">Сводка отдела маркетинга</h1>
       <p className="mt-1 text-sm" style={{ color: V.inkSecondary }}>Демо-данные · собрано из таблиц «Рекламные каналы», «Воронка», «Контент-план»</p>
       <div className="mt-5 flex flex-wrap gap-x-8 gap-y-3 text-sm">
-        <HeroStat label="Расход" value={fmtRub(h.revenue)} />
+        <HeroStat label="Расход" value={fmtRub(h.spend)} />
         <HeroStat label="Продажи" value={fmtInt(h.sales)} />
         <HeroStat label="Лиды" value={fmtInt(h.leads)} />
         <HeroStat label="Охват" value={fmtInt(h.reach)} />

@@ -71,7 +71,9 @@ describe('convertGridSheet', () => {
     const b = snapshot.cellData[3][2]
     expect(a.s).toBeDefined()
     expect(a.s).toBe(b.s)
-    expect(a.s!.startsWith('s2_')).toBe(true)
+    // неймспейс — стабильный google sheetId (1), а не индекс цикла импорта (2):
+    // индекс меняется при переупорядочивании листов и коллидировал ключами между прогонами
+    expect(a.s!.startsWith('s1_')).toBe(true)
     expect(snapshot.styles[a.s!]).toEqual({ bl: 1 })
   })
 

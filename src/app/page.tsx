@@ -7,9 +7,9 @@ import { groupTables, type CatalogTable } from '@/lib/catalog'
 export const dynamic = 'force-dynamic'
 
 const STATUS: Record<CatalogTable['import_status'], { text: string; cls: string }> = {
-  ok: { text: 'импортирована', cls: 'bg-[#eaf3ea] text-[#006300]' },
-  pending: { text: 'ждёт импорта', cls: 'bg-[#f0efec] text-[var(--ink-secondary)]' },
-  error: { text: 'ошибка импорта', cls: 'bg-[#fdeaea] text-[#d03b3b]' },
+  ok: { text: 'импортирована', cls: 'bg-[var(--good-soft)] text-[var(--good-text)]' },
+  pending: { text: 'ждёт импорта', cls: 'bg-[var(--surface-hover)] text-[var(--ink-secondary)]' },
+  error: { text: 'ошибка импорта', cls: 'bg-[var(--negative-soft)] text-[var(--negative)]' },
 }
 
 const fmtDate = (iso: string) =>
@@ -41,7 +41,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ q
           <form method="GET" className="w-72">
             <input
               type="search" name="q" defaultValue={q} placeholder="Поиск по названию или папке…"
-              className="w-full rounded-lg border border-[var(--hairline)] bg-[var(--surface)] px-3 py-2 text-sm outline-none focus:border-[#2a78d6]"
+              className="w-full rounded-lg border border-[var(--hairline)] bg-[var(--surface)] px-3 py-2 text-sm outline-none focus:border-[var(--brand)]"
             />
           </form>
         </div>

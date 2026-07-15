@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { randomBytes } from 'node:crypto'
-import { getApiSession } from '@/lib/auth'
+import { requireAdminApi } from '@/lib/auth'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 
 export const runtime = 'nodejs'
@@ -8,11 +8,10 @@ export const runtime = 'nodejs'
 type Role = 'admin' | 'editor' | 'viewer'
 const isRole = (r: unknown): r is Role => r === 'admin' || r === 'editor' || r === 'viewer'
 
-async function guard() {
-  const session = await getApiSession()
-  if (!session) return { error: NextResponse.json({ error: 'Не авторизован' }, { status: 401 }) } as const
-  if (session.role !== 'admin') return { error: NextResponse.json({ error: 'Только для администратора' }, { status: 403 }) } as const
-  return { session } as const
+const bad = (message: string, status = 400) => NextResponse.json({ error: message }, { status })
+
+async function readBody(request: Request): Promise<Record<string, unknown> | null> {
+  return request.json().catch(() => null)
 }
 
 // Надёжный пароль для передачи сотруднику (Supabase хранит только его bcrypt-хэш).
@@ -21,26 +20,29 @@ function generatePassword(): string {
 }
 
 export async function GET() {
-  const g = await guard()
+  const g = await requireAdminApi()
   if ('error' in g) return g.error
   const admin = createAdminSupabase()
   const { data: profiles } = await admin.from('profiles').select('id, email, full_name').order('email')
   const { data: roles } = await admin.from('user_roles').select('email, role')
-  const roleMap = new Map((roles ?? []).map((r) => [r.email, r.role]))
+  // сопоставление без учёта регистра — как в auth.ts и is_admin()
+  const roleMap = new Map((roles ?? []).map((r) => [String(r.email).toLowerCase(), r.role]))
   const users = (profiles ?? []).map((p) => ({
     id: p.id as string,
     email: p.email as string,
     full_name: (p.full_name as string | null) ?? '',
-    role: (roleMap.get(p.email as string) as Role | undefined) ?? 'viewer',
+    role: (roleMap.get(String(p.email).toLowerCase()) as Role | undefined) ?? 'viewer',
   }))
   return NextResponse.json({ users })
 }
 
 export async function POST(request: Request) {
-  const g = await guard()
+  const g = await requireAdminApi()
   if ('error' in g) return g.error
-  const { email, full_name, role } = await request.json()
-  if (typeof email !== 'string' || !email.includes('@')) return NextResponse.json({ error: 'Некорректная почта' }, { status: 400 })
+  const body = await readBody(request)
+  if (!body) return bad('Некорректный запрос')
+  const { email, full_name, role } = body
+  if (typeof email !== 'string' || !email.includes('@')) return bad('Некорректная почта')
   const normalized = email.trim().toLowerCase()
   const finalRole: Role = isRole(role) ? role : 'viewer'
   const password = generatePassword()
@@ -54,34 +56,49 @@ export async function POST(request: Request) {
   })
   if (error) {
     const msg = error.message.includes('already') ? 'Пользователь с такой почтой уже есть' : error.message
-    return NextResponse.json({ error: msg }, { status: 400 })
+    return bad(msg)
   }
-  await admin.from('user_roles').upsert({ email: normalized, role: finalRole })
-  return NextResponse.json({ ok: true, email: normalized, password }) // пароль показываем один раз
+  const { error: roleError } = await admin.from('user_roles').upsert({ email: normalized, role: finalRole })
+  // аккаунт уже создан — пароль всё равно возвращаем, но предупреждаем о роли
+  const warning = roleError ? `Аккаунт создан, но роль не записана (${roleError.message}) — назначьте её вручную` : undefined
+  return NextResponse.json({ ok: true, email: normalized, password, warning }) // пароль показываем один раз
 }
 
 export async function PATCH(request: Request) {
-  const g = await guard()
+  const g = await requireAdminApi()
   if ('error' in g) return g.error
-  const { email, role } = await request.json()
-  if (!isRole(role)) return NextResponse.json({ error: 'Неизвестная роль' }, { status: 400 })
-  const normalized = String(email).trim().toLowerCase()
+  const body = await readBody(request)
+  if (!body) return bad('Некорректный запрос')
+  const { email, role } = body
+  if (!isRole(role)) return bad('Неизвестная роль')
+  if (typeof email !== 'string' || !email.includes('@')) return bad('Некорректная почта')
+  const normalized = email.trim().toLowerCase()
   if (normalized === g.session.email && role !== 'admin') {
-    return NextResponse.json({ error: 'Нельзя снять админа с самого себя' }, { status: 400 })
+    return bad('Нельзя снять админа с самого себя')
   }
   const admin = createAdminSupabase()
-  await admin.from('user_roles').upsert({ email: normalized, role })
+  const { error } = await admin.from('user_roles').upsert({ email: normalized, role })
+  if (error) return bad(error.message, 500)
   return NextResponse.json({ ok: true })
 }
 
 export async function DELETE(request: Request) {
-  const g = await guard()
+  const g = await requireAdminApi()
   if ('error' in g) return g.error
-  const { id, email } = await request.json()
-  const normalized = String(email).trim().toLowerCase()
-  if (normalized === g.session.email) return NextResponse.json({ error: 'Нельзя удалить самого себя' }, { status: 400 })
+  const body = await readBody(request)
+  if (!body || typeof body.id !== 'string' || !body.id) return bad('Некорректный запрос')
   const admin = createAdminSupabase()
-  await admin.from('user_roles').delete().eq('email', normalized)
-  if (typeof id === 'string' && id) await admin.auth.admin.deleteUser(id) // profile удалится каскадом
+
+  // почту берём из auth по id — присланной в теле не доверяем,
+  // иначе самозащиту можно обойти парой {свой id, чужая почта}
+  const { data: target, error: lookupError } = await admin.auth.admin.getUserById(body.id)
+  if (lookupError || !target?.user?.email) return bad('Пользователь не найден', 404)
+  const email = target.user.email.toLowerCase()
+  if (email === g.session.email) return bad('Нельзя удалить самого себя')
+
+  const { error: roleError } = await admin.from('user_roles').delete().eq('email', email)
+  if (roleError) return bad(roleError.message, 500)
+  const { error: userError } = await admin.auth.admin.deleteUser(body.id) // profile удалится каскадом
+  if (userError) return bad(userError.message, 500)
   return NextResponse.json({ ok: true })
 }

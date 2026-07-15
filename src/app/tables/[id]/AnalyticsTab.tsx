@@ -15,37 +15,65 @@ interface SheetAnalytics {
 
 export function AnalyticsTab({ tableId, sheetIds }: { tableId: string; sheetIds: string[] }) {
   const [sheets, setSheets] = useState<SheetAnalytics[] | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [active, setActive] = useState(0)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const load = useCallback(async () => {
-    const res = await fetch(`/api/tables/${tableId}/analytics`)
-    if (res.ok) setSheets((await res.json()).sheets)
+    try {
+      const res = await fetch(`/api/tables/${tableId}/analytics`)
+      const data = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(data?.error ?? `HTTP ${res.status}`)
+      setSheets(data.sheets)
+      setLoadError(null)
+    } catch (e) {
+      // иначе вкладка навсегда зависает на «Считаем аналитику…»
+      setLoadError(e instanceof Error ? e.message : String(e))
+    }
   }, [tableId])
 
   useEffect(() => { load() }, [load])
 
-  // live: изменения datasets (переимпорт) → перезагрузка виджетов
+  // live: изменения datasets (переимпорт) и table_sheets (новые/удалённые листы) → перезагрузка.
+  // Отдельная подписка на table_sheets нужна: фильтр по sheet_id знает только листы,
+  // существовавшие при открытии вкладки.
   useEffect(() => {
-    if (!sheetIds.length) return
     const supabase = createBrowserSupabase()
-    const channel = supabase
-      .channel(`datasets-${tableId}`)
+    const reload = () => {
+      if (timer.current) clearTimeout(timer.current)
+      timer.current = setTimeout(load, 500)
+    }
+    let channel = supabase
+      .channel(`analytics-${tableId}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'datasets', filter: `sheet_id=in.(${sheetIds.join(',')})` },
-        () => {
-          if (timer.current) clearTimeout(timer.current)
-          timer.current = setTimeout(load, 500)
-        },
+        { event: '*', schema: 'public', table: 'table_sheets', filter: `table_id=eq.${tableId}` },
+        reload,
       )
-      .subscribe()
+    if (sheetIds.length) {
+      channel = channel.on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'datasets', filter: `sheet_id=in.(${sheetIds.join(',')})` },
+        reload,
+      )
+    }
+    channel.subscribe()
     return () => {
       supabase.removeChannel(channel)
       if (timer.current) clearTimeout(timer.current)
     }
   }, [tableId, sheetIds, load])
 
+  if (loadError && !sheets) {
+    return (
+      <div className="mt-6 text-sm">
+        <p className="text-[var(--negative)]">Не удалось загрузить аналитику: {loadError}</p>
+        <button onClick={load} className="mt-2 rounded-lg border border-[var(--hairline)] px-3 py-1.5 hover:bg-[var(--surface-hover)]">
+          Повторить
+        </button>
+      </div>
+    )
+  }
   if (!sheets) return <p className="mt-6 text-sm text-[var(--ink-muted)]">Считаем аналитику…</p>
   if (!sheets.length) return <p className="mt-6 text-sm text-[var(--ink-muted)]">Нет данных.</p>
 
@@ -58,7 +86,7 @@ export function AnalyticsTab({ tableId, sheetIds }: { tableId: string; sheetIds:
             <button
               key={s.sheetId} onClick={() => setActive(i)}
               className={`rounded-full border px-3 py-1 text-sm ${i === active
-                ? 'border-[#2a78d6] text-[#2a78d6]'
+                ? 'border-[var(--brand)] text-[var(--brand)]'
                 : 'border-[var(--hairline)] text-[var(--ink-secondary)]'}`}
             >
               {s.title}

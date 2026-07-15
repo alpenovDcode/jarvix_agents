@@ -8,13 +8,14 @@ config({ path: '.env.local' })
 import { Client } from 'pg'
 import { matrixToSnapshot, parseCsv } from '@/lib/csv'
 import { buildDataset } from '@/lib/dataset/build'
+import { DEMO_ADS, DEMO_CONTENT, DEMO_FUNNEL } from '@/lib/demo'
 import type { DatasetBuild } from '@/lib/types'
 
 interface Demo { key: string; folder: string; title: string; csv: string }
 
 const DEMOS: Demo[] = [
   {
-    key: 'demo-ads', folder: 'Реклама', title: 'Рекламные каналы — июнь 2026',
+    key: DEMO_ADS, folder: 'Реклама', title: 'Рекламные каналы — июнь 2026',
     csv: `Отчёт по рекламным каналам,,,,
 за июнь 2026,,,,
 ,,,,
@@ -31,7 +32,7 @@ const DEMOS: Demo[] = [
 08.06.2026,TikTok,40000,115,348`,
   },
   {
-    key: 'demo-funnel', folder: 'Реклама', title: 'Воронка конверсии по неделям',
+    key: DEMO_FUNNEL, folder: 'Реклама', title: 'Воронка конверсии по неделям',
     csv: `Неделя,Источник,Показы,Клики,Заявки,Продажи
 2026-05-04,SEO,120000,4800,320,64
 2026-05-11,SEO,132000,5200,360,78
@@ -43,7 +44,7 @@ const DEMOS: Demo[] = [
 2026-06-22,Директ,118000,7300,505,132`,
   },
   {
-    key: 'demo-content', folder: 'Контент', title: 'Контент-план',
+    key: DEMO_CONTENT, folder: 'Контент', title: 'Контент-план',
     csv: `Дата,Площадка,Тема,Формат,Охват
 02.06.2026,Instagram,Гайд по продукту,Reels,15400
 04.06.2026,Telegram,Кейс клиента,Пост,8200

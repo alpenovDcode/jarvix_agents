@@ -64,14 +64,24 @@ function extractStyle(fmt?: GoogleCellFormat): SnapshotStyle | null {
   return Object.keys(s).length ? s : null
 }
 
+// Пределы снапшота: Univer не рендерит сетку больше этих размеров,
+// поэтому и ячейки за пределами не сохраняем — иначе таблица и аналитика разойдутся.
+const ROW_LIMIT = 10000
+const COL_LIMIT = 200
+
 export function convertGridSheet(sheet: GoogleGridSheet, sheetIndex: number): { snapshot: SheetSnapshot; report: SheetImportReport } {
   const title = sheet.properties?.title ?? `Лист ${sheetIndex + 1}`
+  // стили неймспейсим по СТАБИЛЬНОМУ google sheetId, не по индексу цикла импорта:
+  // индекс меняется при переупорядочивании листов, и частично обновлённые снапшоты
+  // разных прогонов коллидировали бы ключами в общей styles-карте workbook
+  const styleNs = sheet.properties?.sheetId ?? sheetIndex
   const cellData: SheetSnapshot['cellData'] = {}
   const styles: Record<string, SnapshotStyle> = {}
   const styleIds = new Map<string, string>()
   const report: SheetImportReport = { sheetTitle: title, cellCount: 0, formulaCount: 0, frozenFormulas: [], warnings: [] }
   let maxRow = -1
   let maxCol = -1
+  let clipped = 0
 
   for (const block of sheet.data ?? []) {
     const rowOffset = block.startRow ?? 0
@@ -80,6 +90,7 @@ export function convertGridSheet(sheet: GoogleGridSheet, sheetIndex: number): { 
       ;(rowData.values ?? []).forEach((cell, ci) => {
         const row = rowOffset + ri
         const col = colOffset + ci
+        if (row >= ROW_LIMIT || col >= COL_LIMIT) { clipped++; return }
         const out: SnapshotCell = {}
         const ev = cell.effectiveValue
         if (ev?.numberValue !== undefined) out.v = ev.numberValue
@@ -101,7 +112,7 @@ export function convertGridSheet(sheet: GoogleGridSheet, sheetIndex: number): { 
           const key = JSON.stringify(style)
           let id = styleIds.get(key)
           if (!id) {
-            id = `s${sheetIndex}_${styleIds.size}`
+            id = `s${styleNs}_${styleIds.size}`
             styleIds.set(key, id)
             styles[id] = style
           }
@@ -123,10 +134,14 @@ export function convertGridSheet(sheet: GoogleGridSheet, sheetIndex: number): { 
     endColumn: (m.endColumnIndex ?? 1) - 1,
   }))
 
+  if (clipped > 0) {
+    report.warnings.push(`Обрезано ${clipped} ячеек за пределами ${ROW_LIMIT}×${COL_LIMIT} — лист больше лимита снапшота`)
+  }
+
   const snapshot: SheetSnapshot = {
     name: title,
-    rowCount: Math.min(Math.max(maxRow + 51, 100), 10000),
-    columnCount: Math.min(Math.max(maxCol + 6, 26), 200),
+    rowCount: Math.min(Math.max(maxRow + 51, 100), ROW_LIMIT),
+    columnCount: Math.min(Math.max(maxCol + 6, 26), COL_LIMIT),
     cellData,
     mergeData,
     styles,

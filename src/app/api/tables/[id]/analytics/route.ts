@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getApiSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
-import { buildWidgets, type OkDataset, type Widget } from '@/lib/analytics/widgets'
+import { buildWidgets, type Widget } from '@/lib/analytics/widgets'
+import { okDatasetFromRow, type DatasetDbRow } from '@/lib/dataset/fromRow'
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await getApiSession()
@@ -17,19 +18,12 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   const result = (sheets ?? []).map((s) => {
-    const raw = Array.isArray(s.datasets) ? s.datasets[0] : s.datasets
-    const ds = raw as {
-      status: 'ok' | 'needs_mapping' | 'empty'
-      header_row: number | null; start_col: number | null; end_col: number | null; end_row: number | null
-      confidence: number | null; columns: OkDataset['columns'] | null; rows: OkDataset['rows'] | null
-    } | null
-    if (!ds || ds.status !== 'ok' || !ds.columns || !ds.rows) {
-      return { sheetId: s.id, title: s.title, status: (ds?.status ?? 'empty') as 'needs_mapping' | 'empty', widgets: [] as Widget[], truncated: 0 }
-    }
-    const dataset: OkDataset = {
-      status: 'ok', headerRow: ds.header_row ?? 0, confidence: ds.confidence ?? 0,
-      range: { startCol: ds.start_col ?? 0, endCol: ds.end_col ?? 0, endRow: ds.end_row ?? 0 },
-      columns: ds.columns, rows: ds.rows,
+    const raw = (Array.isArray(s.datasets) ? s.datasets[0] : s.datasets) as DatasetDbRow | null
+    const dataset = okDatasetFromRow(raw)
+    if (!dataset) {
+      // status 'ok' без columns/rows (битая строка) показываем как empty
+      const status = raw?.status === 'needs_mapping' ? 'needs_mapping' as const : 'empty' as const
+      return { sheetId: s.id, title: s.title, status, widgets: [] as Widget[], truncated: 0 }
     }
     const { widgets, truncated } = buildWidgets(dataset)
     return { sheetId: s.id, title: s.title, status: 'ok' as const, widgets, truncated }

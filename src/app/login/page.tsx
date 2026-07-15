@@ -34,20 +34,20 @@ export default function LoginPage() {
           <span className="text-[var(--ink-secondary)]">Почта</span>
           <input
             type="email" required value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username"
-            className="mt-1 w-full rounded-lg border border-[var(--hairline)] px-3 py-2 text-sm outline-none focus:border-[#2a78d6]"
+            className="mt-1 w-full rounded-lg border border-[var(--hairline)] px-3 py-2 text-sm outline-none focus:border-[var(--brand)]"
           />
         </label>
         <label className="mt-3 block text-sm">
           <span className="text-[var(--ink-secondary)]">Пароль</span>
           <input
             type="password" required value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password"
-            className="mt-1 w-full rounded-lg border border-[var(--hairline)] px-3 py-2 text-sm outline-none focus:border-[#2a78d6]"
+            className="mt-1 w-full rounded-lg border border-[var(--hairline)] px-3 py-2 text-sm outline-none focus:border-[var(--brand)]"
           />
         </label>
-        {error && <p className="mt-3 text-sm text-[#d03b3b]">{error}</p>}
+        {error && <p className="mt-3 text-sm text-[var(--negative)]">{error}</p>}
         <button
           type="submit" disabled={loading}
-          className="mt-6 w-full rounded-lg bg-[#2a78d6] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#256abf] disabled:opacity-50"
+          className="mt-6 w-full rounded-lg bg-[var(--brand)] px-4 py-2.5 text-sm font-medium text-white hover:bg-[var(--brand-hover)] disabled:opacity-50"
         >
           {loading ? 'Входим…' : 'Войти'}
         </button>

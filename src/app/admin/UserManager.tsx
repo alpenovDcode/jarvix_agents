@@ -34,6 +34,7 @@ export function UserManager({ selfEmail }: { selfEmail: string }) {
     })
     const data = await res.json()
     if (!res.ok) { setError(data.error ?? 'Ошибка'); return }
+    if (data.warning) setError(data.warning) // аккаунт создан, но роль не записалась
     setCreated({ email: data.email, password: data.password })
     setEmail('')
     setFullName('')
@@ -41,21 +42,18 @@ export function UserManager({ selfEmail }: { selfEmail: string }) {
     await load()
   }
 
-  const changeRole = async (u: User, newRole: string) => {
-    await fetch('/api/admin/users', {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: u.email, role: newRole }),
+  // общий помощник: показывает ошибку API вместо молчаливого отката селекта
+  const mutate = async (method: 'PATCH' | 'DELETE', body: Record<string, unknown>) => {
+    setError(null)
+    const res = await fetch('/api/admin/users', {
+      method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
     })
+    if (!res.ok) setError((await res.json().catch(() => ({}))).error ?? 'Ошибка')
     await load()
   }
 
-  const remove = async (u: User) => {
-    await fetch('/api/admin/users', {
-      method: 'DELETE', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: u.id, email: u.email }),
-    })
-    await load()
-  }
+  const changeRole = (u: User, newRole: string) => mutate('PATCH', { email: u.email, role: newRole })
+  const remove = (u: User) => mutate('DELETE', { id: u.id })
 
   return (
     <section className="rounded-xl border border-[var(--hairline)] bg-[var(--surface)] p-5">
@@ -67,22 +65,22 @@ export function UserManager({ selfEmail }: { selfEmail: string }) {
       <form className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_auto_auto]" onSubmit={create}>
         <input
           type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="почта сотрудника"
-          className="rounded-lg border border-[var(--hairline)] px-3 py-2 text-sm outline-none focus:border-[#2a78d6]"
+          className="rounded-lg border border-[var(--hairline)] px-3 py-2 text-sm outline-none focus:border-[var(--brand)]"
         />
         <input
           type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="имя (необязательно)"
-          className="rounded-lg border border-[var(--hairline)] px-3 py-2 text-sm outline-none focus:border-[#2a78d6]"
+          className="rounded-lg border border-[var(--hairline)] px-3 py-2 text-sm outline-none focus:border-[var(--brand)]"
         />
         <select value={role} onChange={(e) => setRole(e.target.value)} className="rounded-lg border border-[var(--hairline)] px-2 py-2 text-sm">
           {ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
         </select>
-        <button className="rounded-lg bg-[#2a78d6] px-4 py-2 text-sm font-medium text-white hover:bg-[#256abf]">Создать</button>
+        <button className="rounded-lg bg-[var(--brand)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--brand-hover)]">Создать</button>
       </form>
 
-      {error && <p className="mt-2 text-sm text-[#d03b3b]">{error}</p>}
+      {error && <p className="mt-2 text-sm text-[var(--negative)]">{error}</p>}
 
       {created && (
-        <div className="mt-3 rounded-lg border border-[#2a78d6] bg-[#eef5fd] p-3 text-sm">
+        <div className="mt-3 rounded-lg border border-[var(--brand)] bg-[var(--brand-soft)] p-3 text-sm">
           <div className="font-medium">Аккаунт создан — передайте данные сотруднику (пароль показан один раз):</div>
           <div className="mt-2 font-mono text-[13px]">
             <div>почта: <b>{created.email}</b></div>
@@ -90,7 +88,7 @@ export function UserManager({ selfEmail }: { selfEmail: string }) {
           </div>
           <button
             onClick={() => navigator.clipboard.writeText(`Почта: ${created.email}\nПароль: ${created.password}`)}
-            className="mt-2 rounded-md border border-[var(--hairline)] bg-[var(--surface)] px-3 py-1 text-xs hover:bg-[#f0efec]"
+            className="mt-2 rounded-md border border-[var(--hairline)] bg-[var(--surface)] px-3 py-1 text-xs hover:bg-[var(--surface-hover)]"
           >
             Скопировать
           </button>
@@ -112,7 +110,7 @@ export function UserManager({ selfEmail }: { selfEmail: string }) {
                 {ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
               </select>
               {u.email !== selfEmail && (
-                <button onClick={() => remove(u)} className="text-[#d03b3b] hover:underline">удалить</button>
+                <button onClick={() => remove(u)} className="text-[var(--negative)] hover:underline">удалить</button>
               )}
             </span>
           </li>

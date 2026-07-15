@@ -20,7 +20,19 @@ const NUMERIC: ColumnType[] = ['number', 'money', 'percent']
 const TOP_N = 10
 
 const formatOf = (t: ColumnType): ValueFormat => (t === 'money' ? 'money' : t === 'percent' ? 'percent' : 'number')
-const round1 = (n: number) => Math.round(n * 10) / 10
+export const round1 = (n: number): number => Math.round(n * 10) / 10
+
+/** Сумма метрики по категории (пропуская пустые имена и нечисла), по убыванию. */
+export function groupSum(rows: CellScalar[][], keyIdx: number, valIdx: number): { name: string; value: number }[] {
+  const sums = new Map<string, number>()
+  for (const r of rows) {
+    const name = r[keyIdx]
+    const v = r[valIdx]
+    if (name === null || name === '' || typeof v !== 'number') continue
+    sums.set(String(name), (sums.get(String(name)) ?? 0) + v)
+  }
+  return [...sums.entries()].sort(([, a], [, b]) => b - a).map(([name, value]) => ({ name, value }))
+}
 
 function median(sorted: number[]): number {
   const mid = Math.floor(sorted.length / 2)
@@ -106,18 +118,8 @@ export function buildWidgets(d: OkDataset): { widgets: Widget[]; truncated: numb
 
   for (const cat of categoryCols.slice(0, 2)) {
     for (const metric of numericCols.slice(0, 3)) {
-      const cp = pos(cat)
-      const mp = pos(metric)
-      const sums = new Map<string, number>()
-      for (const r of d.rows) {
-        const name = r[cp]
-        const v = r[mp]
-        if (name === null || name === '' || typeof v !== 'number') continue
-        sums.set(String(name), (sums.get(String(name)) ?? 0) + v)
-      }
-      if (!sums.size) continue
-      const items = [...sums.entries()].sort(([, a], [, b]) => b - a).slice(0, TOP_N)
-        .map(([name, value]) => ({ name, value }))
+      const items = groupSum(d.rows, pos(cat), pos(metric)).slice(0, TOP_N)
+      if (!items.length) continue
       widgets.push({
         kind: 'slice', id: `sl:${cat.key}:${metric.key}`, title: `${metric.title} по «${cat.title}»`,
         categoryColumn: cat.title, metricColumn: metric.title, agg: 'sum', items, format: formatOf(metric.type),

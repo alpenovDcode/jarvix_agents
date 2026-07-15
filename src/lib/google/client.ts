@@ -48,8 +48,11 @@ export async function listFolderSpreadsheets(rootFolderId: string): Promise<Driv
   const rootFiles = await listChildren(drive, rootFolderId, SPREADSHEET_MIME)
   for (const f of rootFiles) result.push({ id: f.id, name: f.name, folder: 'Без папки', modifiedTime: f.modifiedTime! })
   const subfolders = await listChildren(drive, rootFolderId, FOLDER_MIME)
-  for (const sub of subfolders) {
-    const files = await listChildren(drive, sub.id, SPREADSHEET_MIME)
+  // подпапки независимы — опрашиваем параллельно (последовательно каждая стоит round-trip к Drive)
+  const perFolder = await Promise.all(
+    subfolders.map(async (sub) => ({ sub, files: await listChildren(drive, sub.id, SPREADSHEET_MIME) })),
+  )
+  for (const { sub, files } of perFolder) {
     for (const f of files) result.push({ id: f.id, name: f.name, folder: sub.name, modifiedTime: f.modifiedTime! })
   }
   return result

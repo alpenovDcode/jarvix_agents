@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { ReportTab } from './ReportTab'
 import { AnalyticsTab } from './AnalyticsTab'
@@ -18,6 +18,10 @@ export function TableTabs({ table, sheets }: {
   sheets: (SheetRowInput & { id: string })[]
 }) {
   const [tab, setTab] = useState<(typeof TABS)[number]>('Таблица')
+  // стабильные ссылки: свежий объект в пропе каждый рендер пересоздавал бы
+  // Univer (эффект по [data]) и Realtime-канал аналитики (эффект по [sheetIds])
+  const workbookData = useMemo(() => assembleWorkbookData(table.id, table.title, sheets), [table.id, table.title, sheets])
+  const sheetIds = useMemo(() => sheets.map((s) => s.id), [sheets])
   return (
     <div className="mt-4">
       <div className="flex gap-1 border-b border-[var(--hairline)]">
@@ -25,15 +29,15 @@ export function TableTabs({ table, sheets }: {
           <button
             key={t} onClick={() => setTab(t)}
             className={`px-4 py-2 text-sm ${tab === t
-              ? 'border-b-2 border-[#2a78d6] font-medium text-[var(--ink)]'
+              ? 'border-b-2 border-[var(--brand)] font-medium text-[var(--ink)]'
               : 'text-[var(--ink-secondary)] hover:text-[var(--ink)]'}`}
           >
             {t}
           </button>
         ))}
       </div>
-      {tab === 'Таблица' && <UniverViewer data={assembleWorkbookData(table.id, table.title, sheets)} />}
-      {tab === 'Аналитика' && <AnalyticsTab tableId={table.id} sheetIds={sheets.map((s) => s.id)} />}
+      {tab === 'Таблица' && <UniverViewer data={workbookData} />}
+      {tab === 'Аналитика' && <AnalyticsTab tableId={table.id} sheetIds={sheetIds} />}
       {tab === 'Отчёт импорта' && <ReportTab report={table.import_report} />}
     </div>
   )

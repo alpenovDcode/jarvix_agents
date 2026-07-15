@@ -6,6 +6,7 @@ describe('parseNumberLike', () => {
     expect(parseNumberLike(42)).toBe(42)
     expect(parseNumberLike('1 234,56')).toBe(1234.56)
     expect(parseNumberLike('1,234.56')).toBe(1234.56)
+    expect(parseNumberLike('1.234,56')).toBe(1234.56) // европейский формат: точка — тысячи, запятая — десятичная
     expect(parseNumberLike('15%')).toBe(0.15)
     expect(parseNumberLike('1 200 ₸')).toBe(1200)
     expect(parseNumberLike('abc')).toBeNull()
@@ -19,11 +20,13 @@ describe('parseRuDate / serialToISO', () => {
     expect(parseRuDate('1.6.26')).toBe('2026-06-01')
     expect(parseRuDate('2026-06-01')).toBe('2026-06-01')
     expect(parseRuDate('45.13.2026')).toBeNull()
+    expect(parseRuDate('2026-99-99')).toBeNull() // ISO-мусор не должен пройти как дата (ронял bucketKey)
     expect(parseRuDate('привет')).toBeNull()
   })
   it('серийные даты Google (эпоха 1899-12-30)', () => {
     expect(serialToISO(46174)).toBe('2026-06-01')
     expect(serialToISO(46175)).toBe('2026-06-02')
+    expect(serialToISO(46174.75)).toBe('2026-06-01') // DATE_TIME 18:00 — тот же день, не завтра
   })
 })
 

@@ -6,7 +6,9 @@ export const runtime = 'nodejs'
 export const maxDuration = 60
 
 async function handle(request: Request) {
-  if (request.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
+  // fail-closed: без настроенного секрета эндпоинт закрыт (иначе подошёл бы literal 'Bearer undefined')
+  const secret = process.env.CRON_SECRET
+  if (!secret || request.headers.get('authorization') !== `Bearer ${secret}`) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 })
   }
   const admin = createAdminSupabase()

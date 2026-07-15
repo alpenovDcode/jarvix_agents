@@ -1,4 +1,5 @@
-import type { OkDataset } from '@/lib/analytics/widgets'
+import { groupSum, round1, type OkDataset, type ValueFormat } from '@/lib/analytics/widgets'
+import { fmtInt } from '@/lib/viz'
 
 // Кураторская «Сводка отдела»: конкретный шаблон под три демо-таблицы маркетинга.
 // ads    — Дата, Канал, Расход, Лиды, Стоимость лида
@@ -6,7 +7,7 @@ import type { OkDataset } from '@/lib/analytics/widgets'
 // content— Дата, Площадка, Тема, Формат, Охват
 // Когда появятся реальные метрики отдела — маппинг колонок заменяется, форма вывода та же.
 
-export type ValueFormat = 'number' | 'money'
+export type { ValueFormat }
 
 export interface Kpi { id: string; label: string; value: number; format: ValueFormat; deltaPct: number | null; note: string }
 export interface Goal { id: string; label: string; value: number; target: number; format: ValueFormat }
@@ -17,13 +18,15 @@ export interface ComboData { title: string; note: string; barLabel: string; line
 export interface Insight { id: string; emoji: string; label: string; text: string }
 export interface Svodka {
   period: string
-  headline: { revenue: number; sales: number; leads: number; reach: number }
+  headline: { spend: number; sales: number; leads: number; reach: number }
   kpis: Kpi[]
   goals: Goal[]
   wasNow: WasNowRow[]
   areas: AreaSeries[]
   combo: ComboData
   insights: Insight[]
+  /** Колонки, не найденные в источниках («таблица: колонка») — сводка по ним молча покажет нули. */
+  missing: string[]
 }
 
 export interface SvodkaInputs { ads: OkDataset; funnel: OkDataset; content: OkDataset }
@@ -37,37 +40,28 @@ function numbers(ds: OkDataset, title: string): number[] {
   if (i < 0) return []
   return ds.rows.map((r) => r[i]).filter((v): v is number => typeof v === 'number')
 }
-function strings(ds: OkDataset, title: string): string[] {
-  const i = colIndex(ds, title)
-  if (i < 0) return []
-  return ds.rows.map((r) => (r[i] == null ? '' : String(r[i])))
-}
 const sum = (xs: number[]): number => xs.reduce((a, b) => a + b, 0)
-const round1 = (n: number): number => Math.round(n * 10) / 10
 
-/** Δ% как «вторая половина периода к первой» — прокси сравнения с прошлым периодом на демо-данных. */
+/**
+ * Δ% как «вторая половина периода к первой» — прокси сравнения с прошлым периодом.
+ * Сравниваем СРЕДНИЕ половин, не суммы: при нечётной длине половины разного размера,
+ * и суммы дали бы +100% на абсолютно ровном ряду.
+ */
 function halfDelta(nums: number[]): number | null {
   if (nums.length < 2) return null
   const mid = Math.floor(nums.length / 2)
-  const first = sum(nums.slice(0, mid))
-  const second = sum(nums.slice(mid))
-  if (first === 0) return null
-  return round1(((second - first) / first) * 100)
+  const firstAvg = sum(nums.slice(0, mid)) / mid
+  const secondAvg = sum(nums.slice(mid)) / (nums.length - mid)
+  if (firstAvg === 0) return null
+  return round1(((secondAvg - firstAvg) / firstAvg) * 100)
 }
 
-/** Сумма метрики по ключу (категории), отсортировано по убыванию. */
+/** Сумма метрики по категории через общий groupSum (единая семантика со slice-виджетами). */
 function sumBy(ds: OkDataset, keyTitle: string, valTitle: string): { name: string; value: number }[] {
   const ki = colIndex(ds, keyTitle)
   const vi = colIndex(ds, valTitle)
   if (ki < 0 || vi < 0) return []
-  const acc = new Map<string, number>()
-  for (const r of ds.rows) {
-    const name = r[ki]
-    const val = r[vi]
-    if (name == null || name === '' || typeof val !== 'number') continue
-    acc.set(String(name), (acc.get(String(name)) ?? 0) + val)
-  }
-  return [...acc.entries()].map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value)
+  return groupSum(ds.rows, ki, vi)
 }
 
 /** Ряд «дата → сумма метрики» (несколько строк на дату суммируются), по возрастанию даты. */
@@ -90,7 +84,18 @@ const shortDate = (iso: string): string => {
   return m ? `${m[2]}.${m[1]}` : iso
 }
 
-export function buildSvodka({ ads, funnel, content }: SvodkaInputs): Svodka {
+/** Требуемые колонки по источникам — для громкого предупреждения вместо тихих нулей. */
+const REQUIRED: { ds: keyof SvodkaInputs; label: string; cols: string[] }[] = [
+  { ds: 'ads', label: 'Рекламные каналы', cols: ['Дата', 'Канал', 'Расход', 'Лиды'] },
+  { ds: 'funnel', label: 'Воронка', cols: ['Неделя', 'Показы', 'Клики', 'Заявки', 'Продажи'] },
+  { ds: 'content', label: 'Контент-план', cols: ['Дата', 'Площадка', 'Охват'] },
+]
+
+export function buildSvodka(inputs: SvodkaInputs): Svodka {
+  const { ads, funnel, content } = inputs
+  const missing = REQUIRED.flatMap(({ ds, label, cols }) =>
+    cols.filter((c) => colIndex(inputs[ds], c) < 0).map((c) => `${label}: «${c}»`))
+
   const spend = sum(numbers(ads, 'Расход'))
   const leads = sum(numbers(ads, 'Лиды'))
   const impressions = sum(numbers(funnel, 'Показы'))
@@ -139,14 +144,19 @@ export function buildSvodka({ ads, funnel, content }: SvodkaInputs): Svodka {
   ]
 
   // Combo: заявки по неделям (бары) + кумулятивные продажи (линия).
+  // Джойним по КЛЮЧУ недели, не по индексу: у ряда без значения за неделю
+  // индексы съезжают, и бары уехали бы на чужие недели.
+  const salesMap = new Map(salesByWeek.map((p) => [p.t, p.v]))
+  const reqMap = new Map(reqByWeek.map((p) => [p.t, p.v]))
+  const allWeeks = [...new Set([...salesMap.keys(), ...reqMap.keys()])].sort((a, b) => a.localeCompare(b))
   let cum = 0
   const combo: ComboData = {
     title: 'Заявки по неделям + продажи нарастающим итогом',
     note: 'Бары — заявки за неделю, линия — суммарные продажи. Каждая продажа поднимает линию ступенькой.',
     barLabel: 'Заявки', lineLabel: 'Продажи Σ', barFormat: 'number', lineFormat: 'number',
-    rows: salesByWeek.map((w, i) => {
-      cum += w.v
-      return { t: shortDate(w.t), bar: reqByWeek[i]?.v ?? 0, line: cum }
+    rows: allWeeks.map((week) => {
+      cum += salesMap.get(week) ?? 0
+      return { t: shortDate(week), bar: reqMap.get(week) ?? 0, line: cum }
     }),
   }
 
@@ -155,19 +165,15 @@ export function buildSvodka({ ads, funnel, content }: SvodkaInputs): Svodka {
   const bestWeek = [...salesByWeek].sort((a, b) => b.v - a.v)[0]
   const clickCr = impressions ? round1((clicks / impressions) * 100) : 0
   const insights: Insight[] = [
-    topChannel && { id: 'i-ch', emoji: '🏆', label: 'Канал-лидер по лидам', text: `«${topChannel.name}» — ${fmtIntLocal(topChannel.value)} лид(ов) за период.` },
-    topPlatform && { id: 'i-pl', emoji: '📣', label: 'Площадка-лидер по охвату', text: `«${topPlatform.name}» — ${fmtIntLocal(topPlatform.value)} охвата.` },
-    bestWeek && { id: 'i-wk', emoji: '🔥', label: 'Лучшая неделя по продажам', text: `${shortDate(bestWeek.t)} — ${fmtIntLocal(bestWeek.v)} продаж.` },
-    { id: 'i-cr', emoji: '📈', label: 'Конверсия показ→клик', text: `${clickCr}% (${fmtIntLocal(clicks)} кликов из ${fmtIntLocal(impressions)} показов).` },
+    topChannel && { id: 'i-ch', emoji: '🏆', label: 'Канал-лидер по лидам', text: `«${topChannel.name}» — ${fmtInt(topChannel.value)} лид(ов) за период.` },
+    topPlatform && { id: 'i-pl', emoji: '📣', label: 'Площадка-лидер по охвату', text: `«${topPlatform.name}» — ${fmtInt(topPlatform.value)} охвата.` },
+    bestWeek && { id: 'i-wk', emoji: '🔥', label: 'Лучшая неделя по продажам', text: `${shortDate(bestWeek.t)} — ${fmtInt(bestWeek.v)} продаж.` },
+    { id: 'i-cr', emoji: '📈', label: 'Конверсия показ→клик', text: `${clickCr}% (${fmtInt(clicks)} кликов из ${fmtInt(impressions)} показов).` },
   ].filter(Boolean) as Insight[]
 
   return {
     period: 'Демо-период',
-    headline: { revenue: spend, sales, leads, reach },
-    kpis, goals, wasNow, areas, combo, insights,
+    headline: { spend, sales, leads, reach },
+    kpis, goals, wasNow, areas, combo, insights, missing,
   }
-}
-
-function fmtIntLocal(v: number): string {
-  return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(v)
 }
