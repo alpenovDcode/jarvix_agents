@@ -32,22 +32,12 @@ async function saveActiveSheet(api: FUniverLike, tableId: string, onState: (s: S
 type SaveState = 'idle' | 'saving' | 'saved' | 'error'
 const STATE_TEXT: Record<SaveState, string> = { idle: '', saving: 'Сохранение…', saved: 'Сохранено ✓', error: 'Ошибка сохранения' }
 
-export default function UniverViewer({ data, tableId, editable = false }: {
-  data: Record<string, unknown>; tableId: string; editable?: boolean
+export default function UniverViewer({ data, tableId }: {
+  data: Record<string, unknown>; tableId: string
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const badgeRef = useRef<HTMLSpanElement>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const editableRef = useRef(editable)
-  const workbookRef = useRef<{ setEditable(v: boolean): void } | null>(null)
-
-  // смена режима — на ЖИВОМ экземпляре, без пересоздания Univer
-  // (пересоздание при toggle роняло рендерер: отложенный dispose старого бил по новому)
-  useEffect(() => {
-    editableRef.current = editable
-    workbookRef.current?.setEditable(editable)
-    if (badgeRef.current) badgeRef.current.textContent = ''
-  }, [editable])
 
   useEffect(() => {
     let disposed = false
@@ -66,13 +56,11 @@ export default function UniverViewer({ data, tableId, editable = false }: {
         presets: [UniverSheetsCorePreset({ container: containerRef.current })],
       })
       const workbook = univerAPI.createWorkbook(data as never)
-      workbook.setEditable(editableRef.current)
-      workbookRef.current = workbook
+      workbook.setEditable(true) // таблицы редактируемы сразу
 
-      // подписка всегда; сохраняем только когда включён режим правки
+      // правки ячеек → автосохранение с дебаунсом
       const api = univerAPI as unknown as FUniverLike
       const evt = api.addEvent(api.Event.SheetValueChanged, () => {
-        if (!editableRef.current) return
         if (timer.current) clearTimeout(timer.current)
         timer.current = setTimeout(() => { void saveActiveSheet(api, tableId, setState) }, 1200)
       })
@@ -82,7 +70,6 @@ export default function UniverViewer({ data, tableId, editable = false }: {
     // (при переключении вкладок) роняет рендерер в race condition
     return () => {
       disposed = true
-      workbookRef.current = null
       if (timer.current) clearTimeout(timer.current)
       const d = dispose
       dispose = undefined
@@ -92,12 +79,7 @@ export default function UniverViewer({ data, tableId, editable = false }: {
 
   return (
     <div className="mt-3">
-      {editable && (
-        <div className="mb-2 flex items-center gap-2 text-xs text-[var(--ink-muted)]">
-          <span className="rounded bg-[var(--brand-soft)] px-2 py-0.5 text-[var(--brand)]">режим правки</span>
-          <span ref={badgeRef} aria-live="polite" />
-        </div>
-      )}
+      <div className="mb-2 h-4 text-xs text-[var(--ink-muted)]"><span ref={badgeRef} aria-live="polite" /></div>
       <div ref={containerRef} style={{ overscrollBehavior: 'none' }} className="h-[70vh] w-full overflow-hidden rounded-xl border border-[var(--hairline)]" />
     </div>
   )
