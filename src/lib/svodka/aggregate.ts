@@ -16,6 +16,8 @@ export interface Point { t: string; v: number }
 export interface AreaSeries { id: string; title: string; note: string; format: ValueFormat; color: 'series1' | 'series2' | 'series3'; points: Point[] }
 export interface ComboData { title: string; note: string; barLabel: string; lineLabel: string; barFormat: ValueFormat; lineFormat: ValueFormat; rows: { t: string; bar: number; line: number }[] }
 export interface Insight { id: string; emoji: string; label: string; text: string }
+export interface BreakdownBar { name: string; value: number }
+export interface Breakdown { id: string; title: string; note: string; format: ValueFormat; color: 'series1' | 'series2' | 'series3'; bars: BreakdownBar[] }
 export interface HeadlineStat { label: string; value: number; format: ValueFormat }
 export interface Svodka {
   period: string
@@ -27,6 +29,8 @@ export interface Svodka {
   wasNow: WasNowRow[]
   areas: AreaSeries[]
   combo: ComboData
+  /** Горизонтальные сравнения по категориям (например метрики по каналам). */
+  breakdowns?: Breakdown[]
   insights: Insight[]
   /** Колонки, не найденные в источниках («таблица: колонка») — сводка по ним молча покажет нули. */
   missing: string[]

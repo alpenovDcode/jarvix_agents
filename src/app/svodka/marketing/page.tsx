@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { requireUser } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
-import { buildMarketingSvodka } from '@/lib/svodka/marketing'
+import { buildMarketingSvodka, type ChannelInput } from '@/lib/svodka/marketing'
 import { VIZ_DARK } from '@/lib/viz'
 import type { SheetSnapshot } from '@/lib/types'
 import { SvodkaView } from '../SvodkaView'
@@ -9,7 +9,13 @@ import { SvodkaView } from '../SvodkaView'
 export const dynamic = 'force-dynamic'
 
 const MARKETING_KEY = 'xlsx:Сводная маркетинг'
-const CORE_SHEET = 'Итог Марафон'
+// основные листы-каналы привлечения (по указанию пользователя)
+const CHANNELS: { sheet: string; name: string }[] = [
+  { sheet: 'Посевы', name: 'Посевы' },
+  { sheet: 'РСЯ', name: 'РСЯ' },
+  { sheet: 'Цой', name: 'Цой' },
+  { sheet: 'INST ЛМ', name: 'INST ЛМ' },
+]
 
 interface SheetRow { title: string; snapshot: SheetSnapshot }
 
@@ -36,8 +42,12 @@ export default async function MarketingSvodkaPage() {
     .eq('google_spreadsheet_id', MARKETING_KEY)
     .maybeSingle<{ table_sheets: SheetRow[] }>()
 
-  const itog = (data?.table_sheets ?? []).find((s) => s.title === CORE_SHEET)?.snapshot
-  if (!itog) return <Missing />
-  const svodka = buildMarketingSvodka(itog)
+  const byTitle = new Map((data?.table_sheets ?? []).map((s) => [s.title, s.snapshot]))
+  const channels: ChannelInput[] = CHANNELS
+    .filter((c) => byTitle.has(c.sheet))
+    .map((c) => ({ name: c.name, snapshot: byTitle.get(c.sheet)! }))
+
+  if (channels.length === 0) return <Missing />
+  const svodka = buildMarketingSvodka(channels)
   return <SvodkaView data={svodka} backHref="/" backLabel="Каталог" />
 }

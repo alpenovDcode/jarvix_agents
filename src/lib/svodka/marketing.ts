@@ -1,137 +1,107 @@
 import { round1 } from '@/lib/analytics/widgets'
 import { fmtInt, fmtRub } from '@/lib/viz'
 import type { SheetSnapshot } from '@/lib/types'
-import type { Insight, Kpi, Svodka, ValueFormat, WasNowRow } from '@/lib/svodka/aggregate'
+import type { Breakdown, Insight, Kpi, Svodka } from '@/lib/svodka/aggregate'
 
-// Кураторская сводка по книге «Сводная маркетинг»: ядро — лист «Итог Марафон»,
-// где два блока-периода (МАЙ АВТО / ИЮНЬ АВТО) с одинаковым набором метрик запуска.
-// Отдельные листы-каналы (РСЯ, Цой, Все ЛМ) — шаблоны на будущее, в основном пустые,
-// поэтому берём заполненный сводный лист. Метрики матчатся по названию внутри блока.
-// Колонки: A=метка(0) · B=План(1) · C=Факт(2) · D+=дни.
+// Кураторская сводка «Сводная маркетинг» по КАНАЛАМ привлечения (основные листы:
+// Посевы, РСЯ, Цой, INST ЛМ). В каждом листе метрики повторяются по под-блокам
+// (лид-магниты / периоды), а колонка B — ИТОГ по блоку. Итог канала = сумма B
+// по всем вхождениям метрики. Метрики матчатся по названию.
+
+export interface ChannelInput { name: string; snapshot: SheetSnapshot }
 
 const cell = (s: SheetSnapshot, r: number, c: number): unknown => s.cellData[r]?.[c]?.v
-const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null)
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
 
-interface Block { label: string; start: number; end: number }
-
-/** Границы блоков-периодов: строки-заголовки со словом «АВТО» в колонке A. */
-function parseBlocks(s: SheetSnapshot): Block[] {
-  const rows = Object.keys(s.cellData).map(Number).sort((a, b) => a - b)
-  const heads = rows.filter((r) => /авто/i.test(str(cell(s, r, 0))))
-  return heads.map((start, i) => ({
-    label: str(cell(s, start, 0)).replace(/\s*авто/i, '').trim(),
-    start,
-    end: (heads[i + 1] ?? rows[rows.length - 1] + 1) - 1,
-  }))
-}
-
-function metric(s: SheetSnapshot, block: Block, name: string): number | null {
-  const key = name.toLowerCase()
-  for (let r = block.start; r <= block.end; r++) {
-    if (str(cell(s, r, 0)).toLowerCase().startsWith(key)) return num(cell(s, r, 2))
-  }
-  return null
-}
-
-interface MetricDef { name: string; label: string; format: ValueFormat; higherBetter: boolean }
-const KPI_METRICS: MetricDef[] = [
-  { name: 'Активаций бота', label: 'Активаций бота', format: 'number', higherBetter: true },
-  { name: 'Кол-во рег', label: 'Регистраций', format: 'number', higherBetter: true },
-  { name: 'Кол-во оплат', label: 'Оплат', format: 'number', higherBetter: true },
-  { name: 'Сумма оплат', label: 'Сумма оплат', format: 'money', higherBetter: true },
-  { name: 'Цена реги', label: 'Цена реги', format: 'money', higherBetter: false },
-  { name: 'Romi', label: 'ROMI', format: 'number', higherBetter: true },
-]
-// воронка запуска: этап → кол-во
-const FUNNEL: { name: string; label: string }[] = [
-  { name: 'Активаций бота', label: 'Активации' },
-  { name: 'Кол-во рег', label: 'Регистрации' },
-  { name: 'Кол-во чекинов 1', label: 'Чекин 1' },
-  { name: 'Кол-во АП', label: 'АП' },
-  { name: 'Кол-во оплат', label: 'Оплаты' },
-]
-
-export function buildMarketingSvodka(itog: SheetSnapshot): Svodka {
-  const blocks = parseBlocks(itog)
-  const may = blocks[0]
-  const jun = blocks[1]
-  if (!may) throw new Error('Итог Марафон: блок периода не найден')
-
-  const kpis: Kpi[] = KPI_METRICS.map((m) => {
-    const cur = metric(itog, may, m.name) ?? 0
-    const next = jun ? metric(itog, jun, m.name) : null
-    // дельта: следующий период (июнь) к текущему (май)
-    const deltaPct = next != null && cur !== 0 ? round1(((next - cur) / cur) * 100) : null
-    return { id: `k-${m.name}`, label: m.label, value: cur, format: m.format, deltaPct, note: jun ? `${jun.label}: ${m.format === 'money' ? fmtRub(next ?? 0) : fmtInt(next ?? 0)}` : '', higherBetter: m.higherBetter }
-  })
-
-  // воронка (combo): бар — кол-во на этапе, линия — % от активаций
-  const base = metric(itog, may, 'Активаций бота') ?? 0
-  const funnelRows = FUNNEL.map((f) => {
-    const v = metric(itog, may, f.name) ?? 0
-    return { t: f.label, bar: v, line: base ? round1((v / base) * 100) : 0 }
-  })
-  const combo: Svodka['combo'] = {
-    title: `Воронка запуска (${may.label})`,
-    note: 'Бары — количество на этапе, линия — конверсия от активаций (%). Сужение воронки от активации к оплате.',
-    barLabel: 'Количество', lineLabel: '% от активаций', barFormat: 'number', lineFormat: 'number',
-    rows: funnelRows,
-  }
-
-  // май → июнь
-  const wasNow: WasNowRow[] = jun ? (['Активаций бота', 'Кол-во рег', 'Сумма оплат', 'Romi'] as const).map((name) => {
-    const def = [...KPI_METRICS].find((m) => m.name === name)!
-    const a = metric(itog, may, name) ?? 0
-    const b = metric(itog, jun, name) ?? 0
-    return { id: `wn-${name}`, label: def.label, from: a, to: b, deltaPct: a ? round1(((b - a) / a) * 100) : 0, format: def.format }
-  }) : []
-
-  // дневная динамика активаций за май (строка «Активаций бота», колонки-дни D+)
-  const dailyRow = findRow(itog, may, 'Активаций бота')
-  const areas: Svodka['areas'] = []
-  if (dailyRow != null) {
-    const pts: { t: string; v: number }[] = []
-    for (let c = 3; c < 40; c++) {
-      const d = cell(itog, may.start + 1, c) // строка дат в блоке (заголовок периода+1)
-      const v = num(cell(itog, dailyRow, c))
-      if (v != null) pts.push({ t: dayLabel(d), v })
+/** Сумма колонки B (ИТОГ, индекс 1) по всем строкам, чья метка начинается с key. */
+function sumByLabel(s: SheetSnapshot, key: string): number {
+  const k = key.toLowerCase()
+  let total = 0
+  for (const r of Object.keys(s.cellData).map(Number)) {
+    if (str(cell(s, r, 0)).toLowerCase().startsWith(k)) {
+      const v = cell(s, r, 1)
+      if (typeof v === 'number' && Number.isFinite(v)) total += v
     }
-    if (pts.length >= 3) areas.push({ id: 'a-daily', title: `Активации по дням (${may.label})`, note: 'дневная динамика активаций бота', format: 'number', color: 'series1', points: pts })
+  }
+  return total
+}
+
+interface ChannelTotals { name: string; budget: number; activations: number; subs: number; pays: number; revenue: number }
+
+function totals(ch: ChannelInput): ChannelTotals {
+  return {
+    name: ch.name,
+    budget: sumByLabel(ch.snapshot, 'Бюджет потраченн'),
+    activations: sumByLabel(ch.snapshot, 'Активаци'), // «Активаций бота» и «Активации бота ТГ»
+    subs: sumByLabel(ch.snapshot, 'Кол-во подписок'),
+    pays: sumByLabel(ch.snapshot, 'Кол-во оплат'),
+    revenue: sumByLabel(ch.snapshot, 'Сумма оплат'),
+  }
+}
+
+const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0)
+const bars = (ch: ChannelTotals[], pick: (c: ChannelTotals) => number) =>
+  ch.map((c) => ({ name: c.name, value: Math.round(pick(c)) })).filter((b) => b.value > 0).sort((a, b) => b.value - a.value)
+
+export function buildMarketingSvodka(channels: ChannelInput[]): Svodka {
+  const ch = channels.map(totals).filter((c) => c.budget > 0 || c.activations > 0 || c.subs > 0)
+
+  const totBudget = sum(ch.map((c) => c.budget))
+  const totAct = sum(ch.map((c) => c.activations))
+  const totSubs = sum(ch.map((c) => c.subs))
+  const totPays = sum(ch.map((c) => c.pays))
+  const totRev = sum(ch.map((c) => c.revenue))
+  const avgCpl = totSubs ? Math.round(totBudget / totSubs) : 0
+
+  const kpis: Kpi[] = [
+    { id: 'k-budget', label: 'Бюджет Σ', value: totBudget, format: 'money', deltaPct: null, note: `${ch.length} каналов`, higherBetter: false },
+    { id: 'k-act', label: 'Активаций Σ', value: totAct, format: 'number', deltaPct: null, note: 'по каналам' },
+    { id: 'k-subs', label: 'Подписок Σ', value: totSubs, format: 'number', deltaPct: null, note: 'по каналам' },
+    { id: 'k-cpl', label: 'Цена подписки', value: avgCpl, format: 'money', deltaPct: null, note: 'средняя по каналам', higherBetter: false },
+    { id: 'k-pays', label: 'Оплат Σ', value: totPays, format: 'number', deltaPct: null, note: 'по каналам' },
+    { id: 'k-rev', label: 'Выручка Σ', value: totRev, format: 'money', deltaPct: null, note: 'сумма оплат' },
+  ]
+
+  // combo: бюджет (бары) + подписки (линия) по каналам
+  const byBudget = [...ch].sort((a, b) => b.budget - a.budget)
+  const combo: Svodka['combo'] = {
+    title: 'Бюджет и подписки по каналам',
+    note: 'Бары — освоенный бюджет канала, линия — полученные подписки. Видно отдачу каждого канала.',
+    barLabel: 'Бюджет ₽', lineLabel: 'Подписки', barFormat: 'money', lineFormat: 'number',
+    rows: byBudget.map((c) => ({ t: c.name, bar: Math.round(c.budget), line: c.subs })),
   }
 
-  const conv = round1(((metric(itog, may, 'Кол-во рег') ?? 0) / (base || 1)) * 100)
-  const romiMay = metric(itog, may, 'Romi')
-  const romiJun = jun ? metric(itog, jun, 'Romi') : null
+  const cplByChannel = ch
+    .filter((c) => c.subs > 0 && c.budget > 0)
+    .map((c) => ({ name: c.name, value: Math.round(c.budget / c.subs) }))
+    .sort((a, b) => a.value - b.value)
+  const allBreakdowns: Breakdown[] = [
+    { id: 'b-budget', title: 'Бюджет по каналам', note: 'освоено, ₽', format: 'money', color: 'series3', bars: bars(ch, (c) => c.budget) },
+    { id: 'b-subs', title: 'Подписки по каналам', note: 'привлечено подписчиков', format: 'number', color: 'series2', bars: bars(ch, (c) => c.subs) },
+    { id: 'b-act', title: 'Активации бота по каналам', note: 'переходы в бота', format: 'number', color: 'series1', bars: bars(ch, (c) => c.activations) },
+    { id: 'b-cpl', title: 'Цена подписки по каналам', note: 'бюджет / подписки — меньше лучше', format: 'money', color: 'series1', bars: cplByChannel },
+  ]
+  const breakdowns = allBreakdowns.filter((b) => b.bars.length > 0)
+
+  const topSubs = bars(ch, (c) => c.subs)[0]
+  const cheapest = cplByChannel[0]
+  const topBudget = byBudget[0]
   const insights: Insight[] = [
-    { id: 'i-conv', emoji: '🔻', label: 'Конверсия активация→регистрация', text: `${conv}% (${fmtInt(metric(itog, may, 'Кол-во рег') ?? 0)} рег из ${fmtInt(base)} активаций).` },
-    romiMay != null && { id: 'i-romi', emoji: romiMay >= 1 ? '✅' : '⚠️', label: `ROMI ${may.label}`, text: `${romiMay.toFixed(2)}${romiJun != null ? ` → ${romiJun.toFixed(2)} (${jun!.label})` : ''} — ${romiMay >= 1 ? 'окупаемость положительная' : 'ниже единицы'}.` },
-    { id: 'i-pay', emoji: '💰', label: 'Оплаты и выручка', text: `${fmtInt(metric(itog, may, 'Кол-во оплат') ?? 0)} оплат на ${fmtRub(metric(itog, may, 'Сумма оплат') ?? 0)} (${may.label}).` },
+    topSubs && { id: 'i-subs', emoji: '🏆', label: 'Канал-лидер по подпискам', text: `«${topSubs.name}» — ${fmtInt(topSubs.value)} подписок.` },
+    cheapest && { id: 'i-cpl', emoji: '💚', label: 'Самая дешёвая подписка', text: `«${cheapest.name}» — ${fmtRub(cheapest.value)} за подписку.` },
+    topBudget && { id: 'i-bud', emoji: '💰', label: 'Крупнейший бюджет', text: `«${topBudget.name}» — ${fmtRub(Math.round(topBudget.budget))} (${round1((topBudget.budget / (totBudget || 1)) * 100)}% всех трат).` },
   ].filter(Boolean) as Insight[]
 
   return {
-    period: blocks.map((b) => b.label).join(' · '),
-    title: 'Сводная маркетинг — запуск марафона',
-    subtitle: `Итог запуска по листу «Итог Марафон» · ${blocks.map((b) => b.label).join(' vs ')} · воронка и юнит-экономика`,
+    period: 'по каналам привлечения',
+    title: 'Сводная маркетинг — каналы привлечения',
+    subtitle: `Сравнение каналов · ${ch.map((c) => c.name).join(' · ')} · итоги по листам`,
     headline: [
-      { label: `Активаций (${may.label})`, value: base, format: 'number' },
-      { label: 'Регистраций', value: metric(itog, may, 'Кол-во рег') ?? 0, format: 'number' },
-      { label: 'Сумма оплат', value: metric(itog, may, 'Сумма оплат') ?? 0, format: 'money' },
-      { label: 'ROMI', value: romiMay ?? 0, format: 'number' },
+      { label: 'Бюджет Σ', value: totBudget, format: 'money' },
+      { label: 'Активаций Σ', value: totAct, format: 'number' },
+      { label: 'Подписок Σ', value: totSubs, format: 'number' },
+      { label: 'Выручка Σ', value: totRev, format: 'money' },
     ],
-    kpis, goals: [], wasNow, areas, combo, insights, missing: [],
+    kpis, goals: [], wasNow: [], areas: [], combo, breakdowns, insights, missing: [],
   }
-}
-
-function findRow(s: SheetSnapshot, block: Block, name: string): number | null {
-  const key = name.toLowerCase()
-  for (let r = block.start; r <= block.end; r++) {
-    if (str(cell(s, r, 0)).toLowerCase().startsWith(key)) return r
-  }
-  return null
-}
-function dayLabel(d: unknown): string {
-  const s = str(d)
-  const m = /^\d{4}-(\d{2})-(\d{2})/.exec(s)
-  return m ? `${m[2]}.${m[1]}` : s || '·'
 }

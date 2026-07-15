@@ -1,10 +1,10 @@
 'use client'
 import Link from 'next/link'
 import {
-  Area, AreaChart, Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis,
+  Area, AreaChart, Bar, BarChart, CartesianGrid, ComposedChart, LabelList, Line, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
 import { VIZ_DARK, fmtCompact, fmtDeltaPct, fmtInt, fmtRub, deltaStatus, goalStatus } from '@/lib/viz'
-import type { AreaSeries, ComboData, Goal, Insight, Kpi, Svodka, ValueFormat, WasNowRow } from '@/lib/svodka/aggregate'
+import type { AreaSeries, Breakdown, ComboData, Goal, Insight, Kpi, Svodka, ValueFormat, WasNowRow } from '@/lib/svodka/aggregate'
 
 const V = VIZ_DARK
 const fmt = (v: number, f: ValueFormat) => (f === 'money' ? fmtRub(v) : fmtInt(v))
@@ -77,6 +77,11 @@ export function SvodkaView({ data, tabs, backHref = '/', backLabel = 'Катал
         <div className="mt-4">
           <ComboCard combo={data.combo} />
         </div>
+        {data.breakdowns && data.breakdowns.length > 0 && (
+          <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+            {data.breakdowns.map((b) => <BreakdownCard key={b.id} b={b} />)}
+          </div>
+        )}
         <SectionLabel className="mt-8">Что сработало — автовыводы</SectionLabel>
         <div className="mt-3 space-y-2">{data.insights.map((i) => <InsightRow key={i.id} i={i} />)}</div>
       </div>
@@ -232,6 +237,27 @@ function ComboCard({ combo }: { combo: ComboData }) {
 }
 function LegendDot({ color, label }: { color: string; label: string }) {
   return <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: color }} />{label}</span>
+}
+
+function BreakdownCard({ b }: { b: Breakdown }) {
+  const color = b.color === 'series1' ? V.series1 : b.color === 'series2' ? V.series2 : V.series3
+  return (
+    <Panel title={b.title} note={b.note}>
+      <div className="mt-3" style={{ height: Math.max(140, b.bars.length * 46) }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={b.bars} layout="vertical" margin={{ top: 0, right: 52, bottom: 0, left: 0 }}>
+            <CartesianGrid stroke={V.grid} horizontal={false} />
+            <XAxis type="number" tick={{ fill: V.inkMuted, fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={fmtCompact} />
+            <YAxis type="category" dataKey="name" tick={{ fill: V.inkSecondary, fontSize: 12 }} tickLine={false} axisLine={false} width={104} />
+            <Tooltip content={<ChartTip format={b.format} />} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
+            <Bar dataKey="value" fill={color} radius={[0, 4, 4, 0]} maxBarSize={30} isAnimationActive={false}>
+              <LabelList dataKey="value" position="right" formatter={(v) => fmt(Number(v), b.format)} style={{ fill: V.inkSecondary, fontSize: 11 }} />
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </Panel>
+  )
 }
 
 function InsightRow({ i }: { i: Insight }) {
