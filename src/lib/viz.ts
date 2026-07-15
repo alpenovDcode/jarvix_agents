@@ -15,9 +15,10 @@ export const VIZ = {
 const nf1 = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 })
 const nf0 = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 })
 
-export function fmtValue(v: number, format: 'number' | 'money' | 'percent'): string {
+export function fmtValue(v: number, format: 'number' | 'money' | 'percent' | 'decimal'): string {
   if (format === 'percent') return `${nf1.format(v * 100)}%`
   if (format === 'money') return nf0.format(v)
+  if (format === 'decimal') return nf1.format(v)
   return Math.abs(v) >= 100 ? nf0.format(v) : nf1.format(v)
 }
 
