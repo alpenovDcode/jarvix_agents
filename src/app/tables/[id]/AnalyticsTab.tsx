@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Bar, BarChart, CartesianGrid, LabelList, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { createBrowserSupabase } from '@/lib/supabase/client'
 import { VIZ, fmtCompact, fmtValue } from '@/lib/viz'
-import type { Widget } from '@/lib/analytics/widgets'
+import type { Widget, ValueFormat } from '@/lib/analytics/widgets'
 
 interface SheetAnalytics {
   sheetId: string
@@ -143,7 +143,7 @@ function KpiCard({ w }: { w: Widget }) {
 }
 
 function ChartTooltip({ active, payload, label, format }: {
-  active?: boolean; payload?: { value: number }[]; label?: string; format: 'number' | 'money' | 'percent'
+  active?: boolean; payload?: { value: number }[]; label?: string; format: ValueFormat
 }) {
   if (!active || !payload?.length) return null
   return (
