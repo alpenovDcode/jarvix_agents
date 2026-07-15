@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { excelColorToHex, numFmtType, parseA1Range, cellValue } from '@/lib/xlsx/convert'
+import { excelColorToHex, numFmtType, parseA1Range, cellValue, excelWidthToPx } from '@/lib/xlsx/convert'
 
 describe('excelColorToHex', () => {
   it('argb с альфой → #rrggbb', () => {
@@ -35,6 +35,15 @@ describe('parseA1Range', () => {
     expect(parseA1Range('Z2:AB4')).toEqual({ startColumn: 25, startRow: 1, endColumn: 27, endRow: 3 })
   })
   it('мусор → null', () => expect(parseA1Range('нет')).toBeNull())
+})
+
+describe('excelWidthToPx', () => {
+  it('дефолтная ширина ~12.63 символа → ~93px', () => {
+    expect(excelWidthToPx(12.63)).toBe(93)
+  })
+  it('широкая колонка 27.75 → ~199px', () => {
+    expect(excelWidthToPx(27.75)).toBe(199)
+  })
 })
 
 describe('cellValue', () => {

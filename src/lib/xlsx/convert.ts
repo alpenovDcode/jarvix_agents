@@ -16,6 +16,9 @@ const BORDER_STYLE: Record<string, number> = {
   medium: 8, mediumDashDot: 9, mediumDashDotDot: 10, mediumDashed: 11, slantDashDot: 12, thick: 13,
 }
 
+/** Ширина Excel (в «символах») → пиксели. MDW ≈ 7px для Calibri 11 + отступ. */
+export const excelWidthToPx = (w: number): number => Math.round(w * 7) + 5
+
 const clamp = (n: number) => Math.max(0, Math.min(255, Math.round(n)))
 function applyTint(hex: string, tint?: number): string {
   if (!tint) return hex
@@ -116,8 +119,10 @@ export function convertXlsxSheet(ws: ExcelJS.Worksheet, sheetIndex: number): { s
   let maxCol = -1
   let clipped = 0
 
-  ws.eachRow({ includeEmpty: false }, (row, rowNumber) => {
-    row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+  // includeEmpty: true — чтобы поймать пустые ячейки с рамкой/заливкой (каркас таблиц).
+  // Записываются только если у них есть непустой стиль (проверка ниже: !out.s → skip).
+  ws.eachRow({ includeEmpty: true }, (row, rowNumber) => {
+    row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
       const r = rowNumber - 1
       const c = colNumber - 1
       if (r >= ROW_LIMIT || c >= COL_LIMIT) { clipped++; return }
@@ -130,7 +135,9 @@ export function convertXlsxSheet(ws: ExcelJS.Worksheet, sheetIndex: number): { s
         out.custom = { frozenFormula: `=${cell.formula}` }
       }
       const style = extractStyle(cell)
-      if (style) {
+      // на пустой ячейке видимы только заливка и границы; формат/жирный/выравнивание
+      // без текста ничего не рисуют — не засоряем снапшот такими стилями
+      if (style && (out.v !== undefined || style.bg || style.bd)) {
         const key = JSON.stringify(style)
         let id = styleIds.get(key)
         if (!id) { id = `s${sheetIndex}_${styleIds.size}`; styleIds.set(key, id); styles[id] = style }
@@ -148,9 +155,14 @@ export function convertXlsxSheet(ws: ExcelJS.Worksheet, sheetIndex: number): { s
   const merges = (ws.model as { merges?: string[] }).merges ?? []
   const mergeData: MergeRange[] = merges.map(parseA1Range).filter((m): m is MergeRange => m !== null)
 
-  // ширины колонок (символы Excel → px ≈ ×7) и высоты строк (points → px ×4/3)
+  // ширины колонок: явная ширина, иначе дефолтная ширина листа (иначе Univer поставит свою)
+  const defW = ws.properties?.defaultColWidth
   const columnWidths: Record<number, number> = {}
-  ws.columns?.forEach((col, i) => { if (col?.width) columnWidths[i] = Math.round(col.width * 7) })
+  const lastCol = Math.min(maxCol, COL_LIMIT - 1)
+  for (let c = 0; c <= lastCol; c++) {
+    const w = ws.getColumn(c + 1)?.width ?? defW
+    if (w) columnWidths[c] = excelWidthToPx(w)
+  }
   const rowHeights: Record<number, number> = {}
   ws.eachRow({ includeEmpty: false }, (row, rn) => { if (row.height) rowHeights[rn - 1] = Math.round(row.height * 4 / 3) })
 
