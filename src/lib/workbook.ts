@@ -15,6 +15,11 @@ export function assembleWorkbookData(tableId: string, title: string, sheets: She
       const { nfType: _nfType, ...univerStyle } = style // nfType — наше поле, Univer его не знает
       styles[id] = univerStyle
     }
+    // ширины/высоты → Univer columnData/rowData
+    const columnData: Record<number, { w: number }> = {}
+    for (const [col, w] of Object.entries(s.snapshot.columnWidths ?? {})) columnData[+col] = { w }
+    const rowData: Record<number, { h: number }> = {}
+    for (const [row, h] of Object.entries(s.snapshot.rowHeights ?? {})) rowData[+row] = { h }
     sheetsById[sid] = {
       id: sid,
       name: s.title,
@@ -22,6 +27,8 @@ export function assembleWorkbookData(tableId: string, title: string, sheets: She
       columnCount: s.snapshot.columnCount,
       cellData: s.snapshot.cellData,
       mergeData: s.snapshot.mergeData,
+      columnData,
+      rowData,
     }
   }
   return { id: `wb_${tableId}`, name: title, sheetOrder, sheets: sheetsById, styles }
