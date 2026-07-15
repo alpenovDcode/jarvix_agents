@@ -27,6 +27,7 @@ export function fmtCompact(v: number): string {
 
 export const fmtRub = (v: number): string => `${nf0.format(Math.round(v))} ₽`
 export const fmtInt = (v: number): string => nf0.format(Math.round(v))
+export const fmtDecimal = (v: number): string => nf1.format(v)
 export const fmtDeltaPct = (v: number): string => `${v >= 0 ? '▲' : '▼'}${nf1.format(Math.abs(v))}%`
 
 // Тёмная тема раздела «Сводка» — dataviz dark surfaces + dark categorical column.

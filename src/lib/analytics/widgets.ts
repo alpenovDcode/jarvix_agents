@@ -1,7 +1,7 @@
 import type { CellScalar, ColumnType, DatasetBuild, DatasetColumn } from '@/lib/types'
 
 export type OkDataset = Extract<DatasetBuild, { status: 'ok' }>
-export type ValueFormat = 'number' | 'money' | 'percent'
+export type ValueFormat = 'number' | 'money' | 'percent' | 'decimal'
 
 export type Widget =
   | { kind: 'rowcount'; id: string; title: string; count: number }

@@ -19,6 +19,16 @@ export interface Insight { id: string; emoji: string; label: string; text: strin
 export interface BreakdownBar { name: string; value: number }
 export interface Breakdown { id: string; title: string; note: string; format: ValueFormat; color: 'series1' | 'series2' | 'series3'; bars: BreakdownBar[] }
 export interface HeadlineStat { label: string; value: number; format: ValueFormat }
+/** Тематический раздел сводки (Каналы, SEO, База, Продукт…) со своим набором виджетов. */
+export interface Section {
+  id: string
+  title: string
+  note?: string
+  kpis?: Kpi[]
+  breakdowns?: Breakdown[]
+  areas?: AreaSeries[]
+  insights?: Insight[]
+}
 export interface Svodka {
   period: string
   title: string
@@ -32,6 +42,8 @@ export interface Svodka {
   /** Горизонтальные сравнения по категориям (например метрики по каналам). */
   breakdowns?: Breakdown[]
   insights: Insight[]
+  /** Тематические разделы под остальные листы (SEO, База, Продукт…). */
+  sections?: Section[]
   /** Колонки, не найденные в источниках («таблица: колонка») — сводка по ним молча покажет нули. */
   missing: string[]
 }

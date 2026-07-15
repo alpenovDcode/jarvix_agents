@@ -3,11 +3,11 @@ import Link from 'next/link'
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, ComposedChart, LabelList, Line, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
-import { VIZ_DARK, fmtCompact, fmtDeltaPct, fmtInt, fmtRub, deltaStatus, goalStatus } from '@/lib/viz'
-import type { AreaSeries, Breakdown, ComboData, Goal, Insight, Kpi, Svodka, ValueFormat, WasNowRow } from '@/lib/svodka/aggregate'
+import { VIZ_DARK, fmtCompact, fmtDecimal, fmtDeltaPct, fmtInt, fmtRub, deltaStatus, goalStatus } from '@/lib/viz'
+import type { AreaSeries, Breakdown, ComboData, Goal, Insight, Kpi, Section, Svodka, ValueFormat, WasNowRow } from '@/lib/svodka/aggregate'
 
 const V = VIZ_DARK
-const fmt = (v: number, f: ValueFormat) => (f === 'money' ? fmtRub(v) : fmtInt(v))
+const fmt = (v: number, f: ValueFormat) => (f === 'money' ? fmtRub(v) : f === 'decimal' ? fmtDecimal(v) : fmtInt(v))
 const STATUS: Record<'good' | 'warning' | 'critical', string> = { good: V.good, warning: V.warning, critical: V.critical }
 
 // Разделы будущего дашборда отдела. Активна только «Сводка»; остальные — заглушки
@@ -84,7 +84,29 @@ export function SvodkaView({ data, tabs, backHref = '/', backLabel = 'Катал
         )}
         <SectionLabel className="mt-8">Что сработало — автовыводы</SectionLabel>
         <div className="mt-3 space-y-2">{data.insights.map((i) => <InsightRow key={i.id} i={i} />)}</div>
+        {data.sections?.map((s) => <SectionBlock key={s.id} s={s} />)}
       </div>
+    </div>
+  )
+}
+
+function SectionBlock({ s }: { s: Section }) {
+  return (
+    <div className="mt-10 border-t pt-8" style={{ borderColor: V.hairline }}>
+      <h2 className="text-lg font-bold">{s.title}</h2>
+      {s.note && <p className="mt-1 text-xs italic" style={{ color: V.inkMuted }}>{s.note}</p>}
+      {s.kpis && s.kpis.length > 0 && (
+        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">{s.kpis.map((k) => <KpiCard key={k.id} k={k} />)}</div>
+      )}
+      {s.breakdowns && s.breakdowns.length > 0 && (
+        <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">{s.breakdowns.map((b) => <BreakdownCard key={b.id} b={b} />)}</div>
+      )}
+      {s.areas && s.areas.length > 0 && (
+        <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">{s.areas.map((a) => <AreaCard key={a.id} a={a} />)}</div>
+      )}
+      {s.insights && s.insights.length > 0 && (
+        <div className="mt-3 space-y-2">{s.insights.map((i) => <InsightRow key={i.id} i={i} />)}</div>
+      )}
     </div>
   )
 }

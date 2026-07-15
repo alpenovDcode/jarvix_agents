@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { requireUser } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
-import { buildMarketingSvodka, type ChannelInput } from '@/lib/svodka/marketing'
+import { buildMarketingSvodka, type MarketingInput } from '@/lib/svodka/marketing'
 import { VIZ_DARK } from '@/lib/viz'
 import type { SheetSnapshot } from '@/lib/types'
 import { SvodkaView } from '../SvodkaView'
@@ -9,13 +9,14 @@ import { SvodkaView } from '../SvodkaView'
 export const dynamic = 'force-dynamic'
 
 const MARKETING_KEY = 'xlsx:Сводная маркетинг'
-// основные листы-каналы привлечения (по указанию пользователя)
-const CHANNELS: { sheet: string; name: string }[] = [
+// основные листы (по указанию пользователя)
+const CHANNEL_SHEETS: { sheet: string; name: string }[] = [
   { sheet: 'Посевы', name: 'Посевы' },
   { sheet: 'РСЯ', name: 'РСЯ' },
   { sheet: 'Цой', name: 'Цой' },
   { sheet: 'INST ЛМ', name: 'INST ЛМ' },
 ]
+const TRAFFIC_ALL = 'Трафик  ALL' // в книге два пробела
 
 interface SheetRow { title: string; snapshot: SheetSnapshot }
 
@@ -43,11 +44,16 @@ export default async function MarketingSvodkaPage() {
     .maybeSingle<{ table_sheets: SheetRow[] }>()
 
   const byTitle = new Map((data?.table_sheets ?? []).map((s) => [s.title, s.snapshot]))
-  const channels: ChannelInput[] = CHANNELS
-    .filter((c) => byTitle.has(c.sheet))
-    .map((c) => ({ name: c.name, snapshot: byTitle.get(c.sheet)! }))
+  const input: MarketingInput = {
+    channels: CHANNEL_SHEETS.filter((c) => byTitle.has(c.sheet)).map((c) => ({ name: c.name, snapshot: byTitle.get(c.sheet)! })),
+    trafficAll: byTitle.get(TRAFFIC_ALL),
+    seo: byTitle.get('SEO'),
+    seoEff: byTitle.get('Эффективность SEO'),
+    baza: byTitle.get('База'),
+    posthog: byTitle.get('PostHog'),
+  }
 
-  if (channels.length === 0) return <Missing />
-  const svodka = buildMarketingSvodka(channels)
+  if (input.channels.length === 0 && !input.trafficAll) return <Missing />
+  const svodka = buildMarketingSvodka(input)
   return <SvodkaView data={svodka} backHref="/" backLabel="Каталог" />
 }
